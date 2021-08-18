@@ -43,8 +43,8 @@ sv = Service(
 async def bangzhu(bot, ev):
     await bot.send(ev, sv_help, at_sender=True)
 
-SecretId = 'AKIDA9sKVQ5TZOxGI3XkgOpzrSmpa4HCqDJ8' #  填你的SecretId
-SecretKey = 'ZsvhCPL0OUJs9AuMYT7TZOvBAsJVR7Vc'#  填你的SecretKey
+SecretId = '' #  填你的SecretId
+SecretKey = ''#  填你的SecretKey
 
 
 try:
