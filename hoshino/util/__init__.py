@@ -43,7 +43,7 @@ async def delete_msg(ev: CQEvent):
     try:
         await hoshino.get_bot().delete_msg(self_id=ev.self_id, message_id=ev.message_id)
     except ActionFailed as e:
-        hoshino.logger.error(f'撤回失败: {e}')
+        hoshino.logger.error(f'撤回失败 retcode={e.retcode}')
     except Exception as e:
         hoshino.logger.exception(e)
 
@@ -54,19 +54,19 @@ async def silence(ev: CQEvent, ban_time, skip_su=True):
             return
         await hoshino.get_bot().set_group_ban(self_id=ev.self_id, group_id=ev.group_id, user_id=ev.user_id, duration=ban_time)
     except ActionFailed as e:
-        hoshino.logger.error(f'禁言失败 {e}')
+        hoshino.logger.error(f'禁言失败 retcode={e.retcode}')
     except Exception as e:
         hoshino.logger.exception(e)
 
 
-def pic2b64(pic: Image) -> str:
+def pic2b64(pic:Image) -> str:
     buf = BytesIO()
     pic.save(buf, format='PNG')
     base64_str = base64.b64encode(buf.getvalue()).decode()
     return 'base64://' + base64_str
 
 
-def fig2b64(plt: plt) -> str:
+def fig2b64(plt:plt) -> str:
     buf = BytesIO()
     plt.savefig(buf, format='PNG', dpi=100)
     base64_str = base64.b64encode(buf.getvalue()).decode()
@@ -103,7 +103,7 @@ DATE_NAME = (
     '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十',
     '卅一'
 )
-def date_name(x: int) -> str:
+def date_name(x:int) -> str:
     return DATE_NAME[x - 1]
 
 NUM_NAME = (
@@ -118,7 +118,7 @@ NUM_NAME = (
     '八〇', '八一', '八二', '八三', '八四', '八五', '八六', '八七', '八八', '八九',
     '九〇', '九一', '九二', '九三', '九四', '九五', '九六', '九七', '九八', '九九',
 )
-def time_name(hh: int, mm: int) -> str:
+def time_name(hh:int, mm:int) -> str:
     return NUM_NAME[hh] + NUM_NAME[mm]
 
 
@@ -127,14 +127,21 @@ class FreqLimiter:
         self.next_time = defaultdict(float)
         self.default_cd = default_cd_seconds
 
+    def remove_cd(self, key):
+        if key in self.next_time:
+            self.next_time.pop(key)
+
+    def clear(self):
+        self.next_time.clear()
+
     def check(self, key) -> bool:
-        return bool(time.time() >= self.next_time[key])
+        return bool(time.time() >= self.next_time.get(key, 0))
 
     def start_cd(self, key, cd_time=0):
         self.next_time[key] = time.time() + (cd_time if cd_time > 0 else self.default_cd)
 
     def left_time(self, key) -> float:
-        return self.next_time[key] - time.time()
+        return self.next_time[key] - time.time() if key in self.next_time else 0
 
 
 class DailyNumberLimiter:

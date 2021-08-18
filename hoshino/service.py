@@ -8,7 +8,6 @@ from functools import wraps
 import nonebot
 import pytz
 from nonebot.command import SwitchException, _FinishException, _PauseException
-from nonebot.message import CanceledException
 
 import hoshino
 from hoshino import log, priv, trigger
@@ -155,7 +154,7 @@ class Service:
             f'Service {self.name} is disabled at group {group_id}')
 
     def check_enabled(self, group_id):
-        return bool((group_id in self.enable_group) or (self.enable_on_default and group_id not in self.disable_group))
+        return bool( (group_id in self.enable_group) or (self.enable_on_default and group_id not in self.disable_group))
 
 
     def _check_all(self, ev: CQEvent):
@@ -164,7 +163,7 @@ class Service:
 
     async def get_enable_groups(self) -> dict:
         """获取所有启用本服务的群
-
+        
         @return { group_id: [self_id1, self_id2] }
         """
         gl = defaultdict(list)
@@ -194,23 +193,20 @@ class Service:
         return deco
 
 
-    def on_prefix(self, *prefix, only_to_me=False) -> Callable:
-        if len(prefix) == 1 and not isinstance(prefix[0], str):
-            prefix = prefix[0]
+    def on_prefix(self, prefix, only_to_me=False) -> Callable:
+        if isinstance(prefix, str):
+            prefix = (prefix, )
         def deco(func) -> Callable:
             sf = ServiceFunc(self, func, only_to_me)
             for p in prefix:
-                if isinstance(p, str):
-                    trigger.prefix.add(p, sf)
-                else:
-                    self.logger.error(f'Failed to add prefix trigger `{p}`, expecting `str` but `{type(p)}` given!')
+                trigger.prefix.add(p, sf)
             return func
         return deco
 
 
-    def on_fullmatch(self, *word, only_to_me=False) -> Callable:
-        if len(word) == 1 and not isinstance(word[0], str):
-            word = word[0]
+    def on_fullmatch(self, word, only_to_me=False) -> Callable:
+        if isinstance(word, str):
+            word = (word, )
         def deco(func) -> Callable:
             @wraps(func)
             async def wrapper(bot: HoshinoBot, event: CQEvent):
@@ -220,10 +216,7 @@ class Service:
                 return await func(bot, event)
             sf = ServiceFunc(self, wrapper, only_to_me)
             for w in word:
-                if isinstance(w, str):
-                    trigger.prefix.add(w, sf)
-                else:
-                    self.logger.error(f'Failed to add fullmatch trigger `{w}`, expecting `str` but `{type(w)}` given!')
+                trigger.prefix.add(w, sf)
             return func
             # func itself is still func, not wrapper. wrapper is a part of trigger.
             # so that we could use multi-trigger freely, regardless of the order of decorators.
@@ -237,30 +230,24 @@ class Service:
         return deco
 
 
-    def on_suffix(self, *suffix, only_to_me=False) -> Callable:
-        if len(suffix) == 1 and not isinstance(suffix[0], str):
-            suffix = suffix[0]
+    def on_suffix(self, suffix, only_to_me=False) -> Callable:
+        if isinstance(suffix, str):
+            suffix = (suffix, )
         def deco(func) -> Callable:
             sf = ServiceFunc(self, func, only_to_me)
             for s in suffix:
-                if isinstance(s, str):
-                    trigger.suffix.add(s, sf)
-                else:
-                    self.logger.error(f'Failed to add suffix trigger `{s}`, expecting `str` but `{type(s)}` given!')
+                trigger.suffix.add(s, sf)
             return func
         return deco
 
 
-    def on_keyword(self, *keywords, only_to_me=False, normalize=True) -> Callable:
-        if len(keywords) == 1 and not isinstance(keywords[0], str):
-            keywords = keywords[0]
+    def on_keyword(self, keywords, only_to_me=False, normalize=True) -> Callable:
+        if isinstance(keywords, str):
+            keywords = (keywords, )
         def deco(func) -> Callable:
             sf = ServiceFunc(self, func, only_to_me, normalize)
             for kw in keywords:
-                if isinstance(kw, str):
-                    trigger.keyword.add(kw, sf)
-                else:
-                    self.logger.error(f'Failed to add keyword trigger `{kw}`, expecting `str` but `{type(kw)}` given!')
+                trigger.keyword.add(kw, sf)
             return func
         return deco
 
@@ -270,10 +257,7 @@ class Service:
             rex = re.compile(rex)
         def deco(func) -> Callable:
             sf = ServiceFunc(self, func, only_to_me, normalize)
-            if isinstance(rex, re.Pattern):
-                trigger.rex.add(rex, sf)
-            else:
-                self.logger.error(f'Failed to add rex trigger `{rex}`, expecting `str` or `re.Pattern` but `{type(rex)}` given!')
+            trigger.rex.add(rex, sf)
             return func
         return deco
 
@@ -300,8 +284,6 @@ class Service:
                             f'Message {session.ctx["message_id"]} is handled as command by {func.__name__}.'
                         )
                         return ret
-                    except CanceledException:
-                        raise _FinishException
                     except (_PauseException, _FinishException, SwitchException) as e:
                         raise e
                     except Exception as e:
@@ -322,10 +304,6 @@ class Service:
                             f'Message {session.ctx["message_id"]} is handled as natural language by {func.__name__}.'
                         )
                         return ret
-                    except CanceledException:
-                        raise _FinishException
-                    except (_PauseException, _FinishException, SwitchException) as e:
-                        raise e
                     except Exception as e:
                         self.logger.error(f'{type(e)} occured when {func.__name__} handling message {session.ctx["message_id"]}.')
                         self.logger.exception(e)
@@ -409,8 +387,6 @@ def sucmd(name, force_private=True, **kwargs) -> Callable:
                 return
             try:
                 return await func(session)
-            except CanceledException:
-                raise _FinishException
             except (_PauseException, _FinishException, SwitchException):
                 raise
             except Exception as e:

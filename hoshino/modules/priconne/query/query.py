@@ -22,32 +22,31 @@ pcn = ' '.join(map(str, [
     # R.img(f'priconne/quick/r{rank_cn}-cn-2.png').cqcode,
 ]))
 
-@sv.on_rex(r'^(\*?([日台国陆b])服?([前中后]*)卫?)?rank(表|推荐|指南)?$')
-async def rank_sheet(bot, ev):
-    match = ev['match']
-    is_jp = match.group(2) == '日'
-    is_tw = match.group(2) == '台'
-    is_cn = match.group(2) and match.group(2) in '国陆b'
-    if not is_jp and not is_tw and not is_cn:
-        await bot.send(ev, '\n请问您要查询哪个服务器的rank表？\n*日rank表\n*台rank表\n*陆rank表', at_sender=True)
-        return
-    msg = [
-        # '\n表格仅供参考',
-        '\n※rank表仅供参考，升r有风险，强化需谨慎\n※请以会长要求为准',
-    ]
-    if is_jp:
-        await bot.send(ev, "\n休闲：输出拉满 辅助当月最高Rank-1裸\n一档：问你家会长", at_sender=True)
-    elif is_tw:
-        msg.append(f'※不定期搬运自漪夢奈特\n※详见油管频道\nR{rank_tw} rank表：\n{ptw}')
-        await bot.send(ev, '\n'.join(msg), at_sender=True)
-        await util.silence(ev, 60)
-    elif is_cn:
-        msg.append(f'※不定期搬运自nga\n※制作by樱花铁道之夜\nR{rank_cn} rank表：\n{pcn}')
-        await bot.send(ev, '\n'.join(msg), at_sender=True)
-        await util.silence(ev, 60)
+#@sv.on_rex(r'^(\*?([日台国陆b])服?([前中后]*)卫?)?rank(表|推荐|指南)?$')
+#async def rank_sheet(bot, ev):
+#    match = ev['match']
+#    is_jp = match.group(2) == '日'
+#    is_tw = match.group(2) == '台'
+#    is_cn = match.group(2) and match.group(2) in '国陆b'
+#    if not is_jp and not is_tw and not is_cn:
+#        await bot.send(ev, '\n请问您要查询哪个服务器的rank表？\n*日rank表\n*台rank表\n*陆rank表', at_sender=True)
+#        return
+#    msg = [
+#        # '\n表格仅供参考',
+#        '\n※rank表仅供参考，升r有风险，强化需谨慎\n※请以会长要求为准',
+#    ]
+#    if is_jp:
+#        await bot.send(ev, "\n休闲：输出拉满 辅助当月最高Rank-1裸\n一档：问你家会长", at_sender=True)
+#    elif is_tw:
+#        msg.append(f'※不定期搬运自漪夢奈特\n※详见油管频道\nR{rank_tw} rank表：\n{ptw}')
+#        await bot.send(ev, '\n'.join(msg), at_sender=True)
+#        await util.silence(ev, 60)
+#    elif is_cn:
+#        msg.append(f'※不定期搬运自nga\n※制作by樱花铁道之夜\nR{rank_cn} rank表：\n{pcn}')
+#        await bot.send(ev, '\n'.join(msg), at_sender=True)
+#        await util.silence(ev, 60)
 
-
-@sv.on_fullmatch('jjc', 'JJC', 'JJC作业', 'JJC作业网', 'JJC数据库', 'jjc作业', 'jjc作业网', 'jjc数据库')
+@sv.on_fullmatch(['jjc', 'JJC', 'JJC作业', 'JJC作业网', 'JJC数据库', 'jjc作业', 'jjc作业网', 'jjc数据库'])
 async def say_arina_database(bot, ev):
     await bot.send(ev, '公主连接Re:Dive 竞技场编成数据库\n日文：https://nomae.net/arenadb \n中文：https://pcrdfans.com/battle')
 
@@ -85,11 +84,11 @@ BCR_SITES = f'''
 {OTHER_KEYWORDS}
 ※日台服速查请输入【pcr速查】'''
 
-@sv.on_fullmatch('pcr速查', 'pcr图书馆', '图书馆')
+@sv.on_fullmatch(['pcr速查', 'pcr图书馆', '图书馆'])
 async def pcr_sites(bot, ev: CQEvent):
     await bot.send(ev, PCR_SITES, at_sender=True)
     await util.silence(ev, 60)
-@sv.on_fullmatch('bcr速查', 'bcr攻略')
+@sv.on_fullmatch(['bcr速查', 'bcr攻略'])
 async def bcr_sites(bot, ev: CQEvent):
     await bot.send(ev, BCR_SITES, at_sender=True)
     await util.silence(ev, 60)
@@ -114,7 +113,7 @@ DRAGON_TOOL = f'''
 龍的探索者們小遊戲單字表 https://hanshino.nctu.me/online/KyaruMiniGame
 镜像 https://hoshino.monster/KyaruMiniGame
 网站内有全词条和搜索，或需科学上网'''
-@sv.on_fullmatch('一个顶俩', '拼音接龙', '韵母接龙')
+@sv.on_fullmatch(['一个顶俩', '拼音接龙', '韵母接龙'])
 async def dragon(bot, ev):
     await bot.send(ev, DRAGON_TOOL, at_sender=True)
     await util.silence(ev, 60)

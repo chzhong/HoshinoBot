@@ -20,6 +20,8 @@ ONE_TURN_TIME = 20
 DB_PATH = os.path.expanduser("~/.hoshino/pcr_avatar_guess.db")
 BLACKLIST_ID = [1072, 1908, 4031, 9000]
 
+limit = util.FreqLimiter(5)
+
 gm = GameMaster(DB_PATH)
 sv = Service(
     "pcr-avatar-guess",
@@ -31,7 +33,7 @@ sv = Service(
 )
 
 
-@sv.on_fullmatch("猜头像排行", "猜头像排名", "猜头像排行榜", "猜头像群排行")
+@sv.on_fullmatch(["猜头像排行", "猜头像排名", "猜头像排行榜", "猜头像群排行"])
 async def description_guess_group_ranking(bot, ev: CQEvent):
     ranking = gm.db.get_ranking(ev.group_id)
     msg = ["【猜头像小游戏排行榜】"]
@@ -50,6 +52,7 @@ async def avatar_guess(bot, ev: CQEvent):
     if gm.is_playing(ev.group_id):
         await bot.finish(ev, "游戏仍在进行中…")
     with gm.start_game(ev.group_id) as game:
+        limit.clear()
         ids = list(_pcr_data.CHARA_NAME.keys())
         game.answer = random.choice(ids)
         while chara.is_npc(game.answer):
@@ -73,6 +76,9 @@ async def on_input_chara_name(bot, ev: CQEvent):
     game = gm.get_game(ev.group_id)
     if not game or game.winner:
         return
+    if not limit.check(ev.user_id):
+        return
+    limit.start_cd(ev.user_id)
     c = chara.fromname(ev.message.extract_plain_text())
     if c.id != chara.UNKNOWN and c.id == game.answer:
         game.winner = ev.user_id

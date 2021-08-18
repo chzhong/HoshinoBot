@@ -21,6 +21,8 @@ ONE_TURN_TIME = 12
 TURN_NUMBER = 5
 DB_PATH = os.path.expanduser("~/.hoshino/pcr_desc_guess.db")
 
+limit = util.FreqLimiter(5)
+
 gm = GameMaster(DB_PATH)
 sv = Service("pcr-desc-guess", bundle="pcr娱乐", help_="""
 [猜角色] 猜猜bot在描述哪位角色
@@ -29,7 +31,7 @@ sv = Service("pcr-desc-guess", bundle="pcr娱乐", help_="""
 )
 
 
-@sv.on_fullmatch("猜角色排行", "猜角色排名", "猜角色排行榜", "猜角色群排行")
+@sv.on_fullmatch(["猜角色排行", "猜角色排名", "猜角色排行榜", "猜角色群排行"])
 async def description_guess_group_ranking(bot, ev: CQEvent):
     ranking = gm.db.get_ranking(ev.group_id)
     msg = ["【猜角色小游戏排行榜】"]
@@ -41,7 +43,7 @@ async def description_guess_group_ranking(bot, ev: CQEvent):
     await bot.send(ev, "\n".join(msg))
 
 
-@sv.on_fullmatch("猜角色", "猜人物")
+@sv.on_fullmatch(["猜角色", "猜人物"])
 async def description_guess(bot, ev: CQEvent):
     if gm.is_playing(ev.group_id):
         await bot.finish(ev, "游戏仍在进行中…")
@@ -55,6 +57,7 @@ async def description_guess(bot, ev: CQEvent):
         await bot.send(ev, f"{PREPARE_TIME}秒后每隔{ONE_TURN_TIME}秒我会给出某位角色的一个描述，根据这些描述猜猜她是谁~")
         await asyncio.sleep(PREPARE_TIME)
         for i, k in enumerate(kws):
+            limit.clear()
             await bot.send(ev, f"提示{i + 1}/{len(kws)}:\n她的{k}是 {profile[k]}")
             await asyncio.sleep(ONE_TURN_TIME)
             if game.winner:
@@ -68,6 +71,9 @@ async def on_input_chara_name(bot, ev: CQEvent):
     game = gm.get_game(ev.group_id)
     if not game or game.winner:
         return
+    if not limit.check(ev.user_id):
+        return
+    limit.start_cd(ev.user_id)
     c = chara.fromname(ev.message.extract_plain_text())
     if c.id != chara.UNKNOWN and c.id == game.answer:
         game.winner = ev.user_id

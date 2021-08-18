@@ -1,8 +1,25 @@
-from hoshino import Service
+from hoshino import Service, priv
 from .spider import *
 
-svtw = Service('pcr-news-tw', bundle='pcr订阅', help_='台服官网新闻')
-svbl = Service('pcr-news-bili', bundle='pcr订阅', help_='B服官网新闻')
+svtw = Service(
+    name = '台服官网新闻',  #功能名
+    use_priv = priv.NORMAL, #使用权限   
+    manage_priv = priv.ADMIN, #管理权限
+    visible = True, #False隐藏
+    enable_on_default = False, #是否默认启用
+    bundle = '订阅', #属于哪一类
+    help_ = '台服官网新闻' #帮助文本
+    )
+svbl = Service(
+    name = 'B服官网新闻',  #功能名
+    use_priv = priv.NORMAL, #使用权限   
+    manage_priv = priv.ADMIN, #管理权限
+    visible = True, #False隐藏
+    enable_on_default = False, #是否默认启用
+    bundle = '订阅', #属于哪一类
+    help_ = 'B服官网新闻' #帮助文本
+    )
+
 
 async def news_poller(spider:BaseSpider, sv:Service, TAG):
     if not spider.item_cache:
@@ -32,10 +49,10 @@ async def send_news(bot, ev, spider:BaseSpider, max_num=5):
     news = news[:min(max_num, len(news))]
     await bot.send(ev, spider.format_items(news), at_sender=True)
 
-@svtw.on_fullmatch('台服新闻', '台服日程')
+@svtw.on_fullmatch(('台服新闻', '台服日程'))
 async def send_sonet_news(bot, ev):
     await send_news(bot, ev, SonetSpider)
 
-@svbl.on_fullmatch('B服新闻', 'b服新闻', 'B服日程', 'b服日程')
+@svbl.on_fullmatch(('B服新闻', 'b服新闻', 'B服日程', 'b服日程'))
 async def send_bili_news(bot, ev):
     await send_news(bot, ev, BiliSpider)

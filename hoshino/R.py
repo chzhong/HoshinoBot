@@ -58,3 +58,5 @@ def get(path, *paths):
 
 def img(path, *paths):
     return ResImg(os.path.join('img', path, *paths))
+
+

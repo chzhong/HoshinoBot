@@ -9,7 +9,7 @@ from hoshino.typing import *
 from .argparse import ArgParser
 from .exception import *
 
-sv = Service('clanbattle', help_='Hoshino开源版 命令以感叹号开头 发送【!帮助】查看说明', bundle='pcr会战')
+sv = Service('clanbattle')
 SORRY = 'ごめんなさい！嘤嘤嘤(〒︿〒)'
 
 _registry:Dict[str, Tuple[Callable, ArgParser]] = {}
@@ -97,8 +97,7 @@ QUICK_START = f'''
 !查刀
 !催刀
 
-※点击链接分享查看完整命令表
-※或前往 v2.hoshinobot.cc
+※前往 t.cn/A6wBzowv 查看完整命令一览表
 ※如有问题请先阅读一览表底部的FAQ
 ※使用前请务必【逐字】阅读开头的必读事项
 '''.rstrip()
@@ -106,7 +105,7 @@ QUICK_START = f'''
 @on_command('!帮助', aliases=('！帮助', '!幫助', '！幫助', '!help', '！help'), only_to_me=False)
 async def cb_help(session:CommandSession):
     await session.send(QUICK_START, at_sender=True)
-    msg = MessageSegment.share(url='https://github.com/Ice-Cirno/HoshinoBot/wiki/%E4%BC%9A%E6%88%98%E7%AE%A1%E7%90%86v2',
+    msg = MessageSegment.share(url='https://github.com/Ice-Cirno/HoshinoBot/blob/master/hoshino/modules/pcrclanbattle/clanbattle/README.md',
                                title='Hoshino会战管理v2',
-                               content='完整命令一览表')
+                               content='命令一览表')
     await session.send(msg)

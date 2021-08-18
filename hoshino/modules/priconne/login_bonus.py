@@ -1,9 +1,26 @@
 import random
-from hoshino import Service, R
+from hoshino import Service, priv, R
 from hoshino.typing import CQEvent
 from hoshino.util import DailyNumberLimiter
 
-sv = Service('pcr-login-bonus', bundle='pcr娱乐', help_='[星乃签到] 给主さま盖章章')
+sv_help = '''
+- [xcw签到] 给主さま盖章章
+'''.strip()
+
+sv = Service(
+    name = '签到',  #功能名
+    use_priv = priv.NORMAL, #使用权限   
+    manage_priv = priv.ADMIN, #管理权限
+    visible = True, #是否可见
+    enable_on_default = True, #是否默认启用
+    bundle = '娱乐', #属于哪一类
+    help_ = sv_help #帮助文本
+    )
+
+@sv.on_fullmatch(["帮助签到"])
+async def bangzhu(bot, ev):
+    await bot.send(ev, sv_help, at_sender=True)
+    
 
 lmt = DailyNumberLimiter(1)
 login_presents = [
@@ -43,7 +60,7 @@ todo_list = [
     '搓一把日麻'
 ]
 
-@sv.on_fullmatch('签到', '盖章', '妈', '妈?', '妈妈', '妈!', '妈！', '妈妈！', only_to_me=True)
+@sv.on_fullmatch(('签到', '盖章', '妈', '妈?', '妈妈', '妈!', '妈！', '妈妈！'), only_to_me=True)
 async def give_okodokai(bot, ev: CQEvent):
     uid = ev.user_id
     if not lmt.check(uid):
@@ -52,4 +69,4 @@ async def give_okodokai(bot, ev: CQEvent):
     lmt.increase(uid)
     present = random.choice(login_presents)
     todo = random.choice(todo_list)
-    await bot.send(ev, f'\nおかえりなさいませ、主さま{R.img("priconne/kokkoro_stamp.png").cqcode}\n{present}を獲得しました\n私からのプレゼントです\n主人今天要{todo}吗？', at_sender=True)
+    await bot.send(ev, f'\nおかえりなさいませ、主さま{R.img(f"stamp/{random.randint(1, 41)}.png").cqcode}\n{present}を獲得しました\n私からのプレゼントです\n欧尼酱今天要{todo}吗？', at_sender=True)
