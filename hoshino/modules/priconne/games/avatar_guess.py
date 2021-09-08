@@ -40,7 +40,7 @@ async def description_guess_group_ranking(bot, ev: CQEvent):
         m = await bot.get_group_member_info(
             self_id=ev.self_id, group_id=ev.group_id, user_id=uid
         )
-        name = util.escape(m["card"]) or util.escape(m["nickname"]) or str(uid)
+        name = util.filt_message(m["card"]) or util.filt_message(m["nickname"]) or str(uid)
         msg.append(f"第{i + 1}名：{name} 猜对{count}次")
     await bot.send(ev, "\n".join(msg))
 
@@ -54,7 +54,7 @@ async def avatar_guess(bot, ev: CQEvent):
         game.answer = random.choice(ids)
         while chara.is_npc(game.answer):
             game.answer = random.choice(ids)
-        c = chara.fromid(game.answer)
+        c = chara.fromid(game.answer, random.choice((3, 6)))
         img = c.icon.open()
         w, h = img.size
         l = random.randint(0, w - PATCH_SIZE)
