@@ -93,13 +93,11 @@ async def check_image(bot, ev, img):
     kw = is_gacha_screenshot(r)
     if not kw:
         record_ocr(ev.group_id, img)
-        sv.logger.info('并非抽卡图，无视.')
         return False, False
     else:
         if not is_new_gacha(r, get_text_coordinate_y(r, kw)):
             if not USE_OPENCV:
                 if not STRICT_MODE:
-                    sv.logger.info('没开OpenCV：貌似晒的不是new？')
                     record_ocr(ev.group_id, img)
                     return False, False
                 else:
@@ -109,7 +107,6 @@ async def check_image(bot, ev, img):
                         return True, False
                     else:
                         record_ocr(ev.group_id, img)
-                        sv.logger.info(f'没开OpenCV：{gacha_amount} 发出货，貌似不太欧')
                         return False, False
             else:
                 image_path = f'{FILE_FOLDER_PATH}{img}.jpg'
@@ -121,19 +118,16 @@ async def check_image(bot, ev, img):
                 if new_gacha:
                     gacha_amount = get_gacha_amount(r)
                     if not gacha_amount:
-                        sv.logger.info('无法识别出货数')
+                        sv.logger.warn('无法识别出货数')
                         return True, False
                     elif gacha_amount < int(gacha_threshold.threshold[str(ev.group_id)]):
-                        sv.logger.info(f'{gacha_amount} 发出 new，发现海豹')
                         return True, True
                     else:
                         record_ocr(ev.group_id, img)
-                        sv.logger.info(f'{gacha_amount} 发出 new')
                         return False, False
                 else:
                     if not error:
                         record_ocr(ev.group_id, img)
-                        sv.logger.info('没出New？')
                         return False, False
                     else:
                         if not STRICT_MODE:
@@ -155,11 +149,9 @@ async def check_image(bot, ev, img):
                 sv.logger.warn(f'有new，但无法确定出货数')
                 return True, False
             elif gacha_amount < int(gacha_threshold.threshold[str(ev.group_id)]):
-                sv.logger.warn(f'{gacha_amount}发出货，发现海豹')
                 return True, True
             else:
                 record_ocr(ev.group_id, img)
-                sv.logger.warn(f'{gacha_amount}发出货，貌似不太欧')
                 return False, False
 
 
@@ -186,7 +178,7 @@ def is_new_gacha(ocr_result, max_text_coordinate_y):
     return False
 
 
-@sv.on_prefix(('激活海豹杀手', '启动海豹杀手'))
+@sv.on_prefix(('启用海豹杀手', '启动海豹杀手'))
 async def enable_sealkiller(bot, ev: CQEvent):
     if not priv.check_priv(ev, priv.ADMIN):
         await bot.finish(ev, '抱歉，您非管理员，无此指令使用权限')
@@ -202,7 +194,7 @@ async def enable_sealkiller(bot, ev: CQEvent):
     await bot.send(ev, f'海豹杀手已启用, 当前海豹判定阈值为{threshold}抽.')
 
 
-@sv.on_fullmatch(('停止海豹杀手', '关掉海豹杀手'))
+@sv.on_fullmatch(('禁用海豹杀手', '关闭海豹杀手'))
 async def disable_sealkiller(bot, ev: CQEvent):
     if not priv.check_priv(ev, priv.ADMIN):
         await bot.finish(ev, '抱歉，您非管理员，无此指令使用权限')
@@ -215,18 +207,20 @@ async def on_input_image(bot, ev: CQEvent):
     if str(ev.group_id) not in gacha_threshold.threshold:
         return
     for seg in ev.message:
-        if seg.type == 'image':
-            img = seg.data['file']
-            need_ocr = await is_possible_gacha_image(bot, ev, img)
-            if need_ocr:
-                sv.logger.info('检测到潜在的晒卡图，正在分析...')
-                need_delete_msg, need_silence = await check_image(bot, ev, img)
-                if need_delete_msg:
-                    if need_silence:
-                        await bot.send(ev, '检测到海豹行为(╯‵□′)╯︵┻━┻')
-                        await bot.delete_msg(self_id=ev.self_id, message_id=ev.message_id)
-                        await util.silence(ev, 10*60, skip_su=False)
-                        await bot.send(ev, 'sealkiller插件提醒您:' + str(MessageSegment.image(f'file:///{os.path.abspath(PIC_PATH)}')) + '拒绝海豹，从我做起')
-                    else:
-                        await bot.delete_msg(self_id=ev.self_id, message_id=ev.message_id)
-                        await bot.send(ev, '虽然没看出你有没有在晒卡，总之消息先撤回了~')
+        if seg.type != 'image':
+            continue # 非图片消息
+        img = seg.data['file']
+        need_ocr = await is_possible_gacha_image(bot, ev, img)
+        if not need_ocr:
+            continue # 不是抽卡图
+        need_delete_msg, need_silence = await check_image(bot, ev, img)
+        if not need_delete_msg:
+            continue # 非海豹行为或疑似海豹行为
+        if need_silence:
+            await bot.send(ev, '检测到海豹行为(╯‵□′)╯︵┻━┻')
+            #await bot.delete_msg(self_id=ev.self_id, message_id=ev.message_id)
+            await util.silence(ev, 10*60, skip_su=False)
+            await bot.send(ev, 'sealkiller插件提醒您:' + str(MessageSegment.image(f'file:///{os.path.abspath(PIC_PATH)}')) + '拒绝海豹，从我做起')
+        else:
+            #await bot.delete_msg(self_id=ev.self_id, message_id=ev.message_id)
+            await bot.send(ev, '虽然没看出你有没有在晒卡，总之消息先撤回了~')
