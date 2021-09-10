@@ -263,7 +263,7 @@ async def send_report(bot, event, background):
         if name['qqid'] == uid:
             nickname = name['nickname']
             break
-        elif nickname_abbr in name['nickname']:
+        elif nickname_abbr and nickname_abbr in name['nickname']:
             if nickname is None:
                 nickname = name['nickname']
                 uid = name['qqid']
