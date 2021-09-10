@@ -300,10 +300,19 @@ async def send_report(bot, event, background):
         times_to_boss[challenge['boss_num']-1] += 1
         if not challenge['is_continue']:
             damage_to_boss[challenge['boss_num']-1] += challenge['damage']  #尾刀伤害不计入单boss总伤害，防止avg异常
-            truetimes_to_boss[challenge['boss_num']-1] += 1
-            total_challenge += 1
+            if challenge['health_ramain'] == 0:
+                truetimes_to_boss[challenge['boss_num']-1] += 0.5
+                total_challenge += 0.5
+            else:
+                truetimes_to_boss[challenge['boss_num']-1] += 1
+                total_challenge += 1
             if challenge['damage'] == 0:    #掉刀
                 lost_challenge += 1
+        else:
+            # 补偿刀和尾余刀的处理
+            damage_to_boss[challenge['boss_num']-1] += challenge['damage']  #尾刀伤害不计入单boss总伤害，防止avg异常
+            truetimes_to_boss[challenge['boss_num']-1] += 0.5
+
     if current_days * 3 < total_challenge: #如果会战排期改变 修正天数数据
         current_days =  math.ceil(float(total_challenge) / 3)
     avg_day_damage = int(total_damage/current_days)
