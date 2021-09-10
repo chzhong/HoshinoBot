@@ -1,5 +1,6 @@
 from io import BytesIO
 import os
+from typing import SupportsRound
 import aiohttp
 import datetime
 import calendar
@@ -201,6 +202,9 @@ def add_text(img: Image,text:str,textsize:int,font=font_path,textfill='black',po
     draw.text(xy=position,text=text,font=img_font,fill=textfill)
     return img
 
+def simple(v: SupportsRound):
+    return int(v) if v == int(v) else v
+
 async def send_report(bot, event, background):
     uid = None
     nickname_abbr = None
@@ -357,7 +361,7 @@ async def send_report(bot, event, background):
     for i in range(0,5):
         rec = recs[i]
         h = rec.get_height()
-        plt.text(rec.get_x()+0.1, h, f'{truetimes_to_boss[i]}刀',fontdict={"size":12})
+        plt.text(rec.get_x()+0.1, h, f'{simple(truetimes_to_boss[i])}刀',fontdict={"size":12})
     buf = BytesIO()
     plt.savefig(buf, format='png', transparent=True, dpi=120)
     bar_img1 = Image.open(buf)
@@ -402,16 +406,16 @@ async def send_report(bot, event, background):
 
     #添加文字到img
     row1 = f'''
-    {total_challenge}
+    {simple(total_challenge)}
 
-    {forget_challenge}
+    {simple(forget_challenge)}
 
     {total_damage // 10000}万
     '''
     row2 = f'''
     {attendance_rate}%
 
-    {lost_challenge}
+    {simple(lost_challenge)}
 
     {avg_day_damage // 10000}万
     '''
