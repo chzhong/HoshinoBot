@@ -310,8 +310,11 @@ async def send_report(bot, event, background):
                 lost_challenge += 1
         else:
             # 补偿刀和尾余刀的处理
+            total_challenge += 0.5
             damage_to_boss[challenge['boss_num']-1] += challenge['damage']  #尾刀伤害不计入单boss总伤害，防止avg异常
             truetimes_to_boss[challenge['boss_num']-1] += 0.5
+            if challenge['damage'] == 0:    #掉刀
+                lost_challenge += 0.5
 
     if current_days * 3 < total_challenge: #如果会战排期改变 修正天数数据
         current_days =  math.ceil(float(total_challenge) / 3)
@@ -354,7 +357,7 @@ async def send_report(bot, event, background):
     for i in range(0,5):
         rec = recs[i]
         h = rec.get_height()
-        plt.text(rec.get_x()+0.1, h, f'{int(truetimes_to_boss[i])}刀',fontdict={"size":12})
+        plt.text(rec.get_x()+0.1, h, f'{truetimes_to_boss[i]}刀',fontdict={"size":12})
     buf = BytesIO()
     plt.savefig(buf, format='png', transparent=True, dpi=120)
     bar_img1 = Image.open(buf)
