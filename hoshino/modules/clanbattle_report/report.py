@@ -6,7 +6,7 @@ import calendar
 import re
 import base64
 import json
-from hoshino import Service, priv 
+from hoshino import Service, priv
 from hoshino.util import FreqLimiter
 from hoshino.typing import CQEvent
 import matplotlib.pyplot as plt
@@ -47,8 +47,9 @@ cycle_data = {
 }
 url_valid = re.compile(
         r'^(?:http|ftp)s?://' # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.?)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' #domain...
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' #domain...
         r'localhost|' #localhost...
+        r'[a-zA-Z0-9][a-zA-Z0-9_.-]+|' #docker container name...
         r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})' # ...or ip
         r'(?::\d+)?' # optional port
         r'(?:/?|[/?]\S+)$', re.IGNORECASE)
@@ -60,12 +61,12 @@ API地址获取步骤：
 - [生成离职报告 @用户 API地址] 生成离职报告
 - [设置工会api API地址] (需要管理员权限)为本群设置默认的Yobot工会API
 - [查看工会api] (需要管理员权限)查看本群设置的Yobot API
-- [清除工会api] 
+- [清除工会api]
 '''.strip()
 
 sv = Service(
     name = '会战报告',  #功能名
-    use_priv = priv.NORMAL, #使用权限   
+    use_priv = priv.NORMAL, #使用权限
     manage_priv = priv.ADMIN, #管理权限
     visible = True, #False隐藏
     enable_on_default = False, #是否默认启用
@@ -76,7 +77,7 @@ sv = Service(
 @sv.on_fullmatch(["帮助会战报告"])
 async def bangzhu(bot, ev):
     await bot.send(ev, sv_help, at_sender=True)
-    
+
 # 单json文件储存全部群api会出现奇怪的bug 所以每个群使用一个独立文件
 #读取群api
 def load_group_api(group_id):
@@ -202,12 +203,21 @@ def add_text(img: Image,text:str,textsize:int,font=font_path,textfill='black',po
 
 async def send_report(bot, event, background):
     uid = None
+    nickname_abbr = None
     api_url = ""
     for m in event['message']:
         if m.type == 'at' and m.data['qq'] != 'all':
             uid = int(m.data['qq'])
         elif m.type == 'text':
-            api_url = str(m.data['text']).strip()
+            text = m.data['text']
+            if text[0] == '@':
+                if ' ' in text:
+                    nickname_abbr, api_url = text[1:].split(' ', 1)
+                else:
+                    nickname_abbr = text[1:]
+                uid = nickname_abbr
+            else:
+                api_url = str(m.data['text']).strip()
     if uid is None: #本人
         uid = event['user_id']
     else:   #指定对象
@@ -234,7 +244,14 @@ async def send_report(bot, event, background):
                 data = await resp.json()
     except Exception as e:
         sv.logger.error(f'Error: {e}')
+        lmt.remove_cd(uid)
         await bot.send(event, '无法访问API，请检查yobot服务器状态', at_sender=True)
+        return
+
+    if data.get('code') != 0:
+        sv.logger.error(f'Error {data["code"]}: {data["message"]}')
+        lmt.remove_cd(uid)
+        await bot.send(event, '获取数据错误: ' + data["message"] + '，请检查公会API', at_sender=True)
         return
 
     clanname = data['groupinfo'][0]['group_name']
@@ -245,13 +262,22 @@ async def send_report(bot, event, background):
     for name in data['members']:
         if name['qqid'] == uid:
             nickname = name['nickname']
+            break
+        elif nickname_abbr in name['nickname']:
+            if nickname is None:
+                nickname = name['nickname']
+                uid = name['qqid']
+            else:
+                await bot.send(event, f'用户昵称 “{nickname_abbr}” 不明确', at_sender=True)
+                return
+
     if nickname is None:
         await bot.send(event, '该用户的工会战记录不存在', at_sender=True)
         return
     for item in data['challenges']:
         if item['qqid'] == uid:
             challenge_list.append(item)
-    
+
     total_challenge = 0 #总出刀数
     total_damage = 0    #总伤害
     lost_challenge = 0  #掉刀
@@ -263,7 +289,7 @@ async def send_report(bot, event, background):
     attendance_rate = 0 #出勤率
     battle_days = get_battle_days(game_server) #会战天数
     #计算当前为工会战第几天 取值范围1~battle_days
-    current_days = get_days_from_battle_start(game_server) 
+    current_days = get_days_from_battle_start(game_server)
     if current_days < 0 or current_days >= battle_days:
         current_days = battle_days
     else: #0 ~ battle_days-1
@@ -289,7 +315,7 @@ async def send_report(bot, event, background):
     for i in range(0,5):
         if truetimes_to_boss[i] > 0:    #排除没有出刀或只打尾刀的boss
             avg_boss_damage[i] = damage_to_boss[i] // truetimes_to_boss[i]    #尾刀不计入均伤和出刀图表
-    
+
     #设置中文字体
     font_manager.fontManager.addfont(font_path)
     plt.rcParams['font.family']=['SimHei'] #用来正常显示中文标签
@@ -377,7 +403,7 @@ async def send_report(bot, event, background):
 
     {avg_day_damage // 10000}万
     '''
-    
+
     add_text(img, row1, position=(380,630), textsize=42)
     add_text(img, row2, position=(833,630), textsize=42)
 
