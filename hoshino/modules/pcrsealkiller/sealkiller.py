@@ -11,13 +11,13 @@ from hoshino.typing import CQEvent, MessageSegment
 
 sv_help = '''
 自动击杀晒卡海豹，请给机器人管理员或者群主：
-- [启用海豹杀手 海豹判定阈值]：如果不输入参数，默认阈值是100
-- [禁用海豹杀手] 关闭海豹杀手服务
+- [激活海豹杀手 海豹判定阈值]：如果不输入参数，默认阈值是100
+- [停止海豹杀手] 关闭海豹杀手服务
 '''.strip()
 
 sv = Service(
     name = '海豹杀手',  #功能名
-    use_priv = priv.NORMAL, #使用权限   
+    use_priv = priv.NORMAL, #使用权限
     manage_priv = priv.ADMIN, #管理权限
     visible = True, #是否可见
     enable_on_default = False, #是否默认启用
@@ -28,14 +28,14 @@ sv = Service(
 @sv.on_fullmatch(["帮助海豹杀手"])
 async def bangzhu(bot, ev):
     await bot.send(ev, sv_help, at_sender=True)
-    
+
 
 
 GACHA_KEYWORDS = ['所持角色交换Pt', '持有的角色交換Pt', '所持キャラ交換Pt', '持有的角色交换Pt', '所持キャラ交换Pt', '所持CSPキャラ交換Pt']
 FILE_FOLDER_PATH = './hoshino/modules/pcrsealkiller/'
 CONFIG_PATH =  f'{FILE_FOLDER_PATH}config.json'
 PIC_PATH = f'{FILE_FOLDER_PATH}sealkiller.jpg'
-DEFAULT_GACHA_THRESHOLD = 100   # 海豹判定阈值, 如果抽卡次数小于这个阈值，则被判定为海豹
+DEFAULT_GACHA_THRESHOLD = 50    # 海豹判定阈值, 如果抽卡次数小于这个阈值，则被判定为海豹
 STRICT_MODE = True              # 开启严格模式后，如果未发现"NEW"而抽卡次数小于阈值，仍会撤回消息，但是不禁言（宁可错杀也不可放过海豹）
 USE_OPENCV = True               # 是否使用Opencv提高识别精确度
 
@@ -88,23 +88,28 @@ async def check_image(bot, ev, img):
     try:
         r = await bot.call_action(action='.ocr_image', image=img)
     except:
+        sv.logger.warn('call_action 失败.', exc_info=1)
         return False, False
     kw = is_gacha_screenshot(r)
     if not kw:
         record_ocr(ev.group_id, img)
+        sv.logger.info('并非抽卡图，无视.')
         return False, False
     else:
         if not is_new_gacha(r, get_text_coordinate_y(r, kw)):
             if not USE_OPENCV:
                 if not STRICT_MODE:
+                    sv.logger.info('没开OpenCV：貌似晒的不是new？')
                     record_ocr(ev.group_id, img)
                     return False, False
                 else:
                     gacha_amount = get_gacha_amount(r)
                     if not gacha_amount or gacha_amount < int(gacha_threshold.threshold[str(ev.group_id)]):
+                        sv.logger.info(f'没开OpenCV：{gacha_amount} 发出货（或者无法识别出货数）')
                         return True, False
                     else:
                         record_ocr(ev.group_id, img)
+                        sv.logger.info(f'没开OpenCV：{gacha_amount} 发出货，貌似不太欧')
                         return False, False
             else:
                 image_path = f'{FILE_FOLDER_PATH}{img}.jpg'
@@ -116,35 +121,45 @@ async def check_image(bot, ev, img):
                 if new_gacha:
                     gacha_amount = get_gacha_amount(r)
                     if not gacha_amount:
+                        sv.logger.info('无法识别出货数')
                         return True, False
                     elif gacha_amount < int(gacha_threshold.threshold[str(ev.group_id)]):
+                        sv.logger.info(f'{gacha_amount} 发出 new，发现海豹')
                         return True, True
                     else:
                         record_ocr(ev.group_id, img)
+                        sv.logger.info(f'{gacha_amount} 发出 new')
                         return False, False
                 else:
                     if not error:
                         record_ocr(ev.group_id, img)
+                        sv.logger.info('没出New？')
                         return False, False
                     else:
                         if not STRICT_MODE:
                             record_ocr(ev.group_id, img)
+                            sv.logger.warn(f'出错了：{error}')
                             return False, False
                         else:
                             gacha_amount = get_gacha_amount(r)
                             if not gacha_amount or gacha_amount < int(gacha_threshold.threshold[str(ev.group_id)]):
+                                sv.logger.warn(f'出错了：{error}，出货次数 {gacha_amount}')
                                 return True, False
                             else:
                                 record_ocr(ev.group_id, img)
+                                sv.logger.warn(f'出错了：{error}，貌似不太欧')
                                 return False, False
         else:
             gacha_amount = get_gacha_amount(r)
             if not gacha_amount:
+                sv.logger.warn(f'有new，但无法确定出货数')
                 return True, False
             elif gacha_amount < int(gacha_threshold.threshold[str(ev.group_id)]):
+                sv.logger.warn(f'{gacha_amount}发出货，发现海豹')
                 return True, True
             else:
                 record_ocr(ev.group_id, img)
+                sv.logger.warn(f'{gacha_amount}发出货，貌似不太欧')
                 return False, False
 
 
@@ -171,7 +186,7 @@ def is_new_gacha(ocr_result, max_text_coordinate_y):
     return False
 
 
-@sv.on_prefix(('启用海豹杀手', '启动海豹杀手'))
+@sv.on_prefix(('激活海豹杀手', '启动海豹杀手'))
 async def enable_sealkiller(bot, ev: CQEvent):
     if not priv.check_priv(ev, priv.ADMIN):
         await bot.finish(ev, '抱歉，您非管理员，无此指令使用权限')
@@ -187,7 +202,7 @@ async def enable_sealkiller(bot, ev: CQEvent):
     await bot.send(ev, f'海豹杀手已启用, 当前海豹判定阈值为{threshold}抽.')
 
 
-@sv.on_fullmatch(('禁用海豹杀手', '关闭海豹杀手'))
+@sv.on_fullmatch(('停止海豹杀手', '关掉海豹杀手'))
 async def disable_sealkiller(bot, ev: CQEvent):
     if not priv.check_priv(ev, priv.ADMIN):
         await bot.finish(ev, '抱歉，您非管理员，无此指令使用权限')
@@ -204,6 +219,7 @@ async def on_input_image(bot, ev: CQEvent):
             img = seg.data['file']
             need_ocr = await is_possible_gacha_image(bot, ev, img)
             if need_ocr:
+                sv.logger.info('检测到潜在的晒卡图，正在分析...')
                 need_delete_msg, need_silence = await check_image(bot, ev, img)
                 if need_delete_msg:
                     if need_silence:
