@@ -209,15 +209,15 @@ async def send_report(bot, event, background):
         if m.type == 'at' and m.data['qq'] != 'all':
             uid = int(m.data['qq'])
         elif m.type == 'text':
-            text = m.data['text']
-            if text[0] == '@':
+            text = str(m.data['text']).strip()
+            if text and text[0] == '@':
                 if ' ' in text:
                     nickname_abbr, api_url = text[1:].split(' ', 1)
                 else:
                     nickname_abbr = text[1:]
                 uid = nickname_abbr
             else:
-                api_url = str(m.data['text']).strip()
+                api_url = text
     if uid is None: #本人
         uid = event['user_id']
     else:   #指定对象
