@@ -149,11 +149,11 @@ class SealConfig:
     def add_free_date(self, s, now=None):
         free_date = parse_date(s, now).strftime('%Y-%m-%d')
         changed = False
-        if free_date not in self.free_dates:
-            self.free_dates.append(free_date)
-            changed = True
         if free_date in self.black_dates:
             self.black_dates.remove(free_date)
+            changed = True
+        elif free_date not in self.free_dates:
+            self.free_dates.append(free_date)
             changed = True
         if changed:
             self.save_config()
@@ -362,7 +362,8 @@ async def hour_call():
             sv.logger.info(f'群 {gid} 无封印人员')
             continue
         sv.logger.info(f'向群 {gid} 的 {len(group_ats)} 名被封印人员发送提醒')
-        await sv.bot.send_group_msg(int(gid), '封印已经解除，孩子们可以稍微放松一下了。' + ' '.join(group_ats)
-                                    + str(R.img(f"children_release{random.randint(1, 4)}.jpg").cqcode))
+        msg = '封印已经解除，孩子们可以稍微放松一下了。' + ' '.join(group_ats) \
+                + str(R.img(f"children_release{random.randint(1, 4)}.jpg").cqcode)
+        await sv.bot.send_group_msg(int(gid), msg)
     sv.logger.info('清理过期的特殊封印时点')
     config.clean_dates()
