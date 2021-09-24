@@ -94,12 +94,11 @@ class SealConfig:
                 },
                 'seals': self.seals
             }
-            json.dump(config, fp)
-            fp.flush()
+            json.dump(config, fp, indent=4)
 
     def add_seal(self, gid: str, qqid: str, delegate=None, delegate_days=None):
         group_config = self.seals.get(gid, {})
-        if qqid in seal:
+        if qqid in group_config:
             seal_config = group_config[qqid]
         else:
             seal_config = {}
@@ -199,15 +198,15 @@ class SealConfig:
         return '本群被封印人员：\n' + '\n'.join(seal_descs)
 
     def get_ats(self, dow: int, free_day):
-            ats = []
-            for gid, group_config in self.seals.items():
-                group_ats = []
-                group_at_config = {'gid': gid, 'ats': group_ats}
-                for qqid, seal_config in group_config.items():
-                    group_ats.append(self._at_sealed(dow, free_day, qqid, seal_config))
-                group_at_config['ats'] = group_ats
-                ats.append(group_at_config)
-            return ats
+        ats = []
+        for gid, group_config in self.seals.items():
+            group_ats = []
+            group_at_config = {'gid': gid, 'ats': group_ats}
+            for qqid, seal_config in group_config.items():
+                group_ats.append(self._at_sealed(dow, free_day, qqid, seal_config))
+            group_at_config['ats'] = group_ats
+            ats.append(group_at_config)
+        return ats
 
     def is_relax_day(self, now: datetime = None):
         now = now if now else datetime.now()
@@ -262,22 +261,23 @@ async def seal(bot, ev):
     gid = str(ev.group_id)
     sid = None
     delegate = None
-    days = ev.message.extract_plain_text()
     delegate_days = None
+    sv.logger.info(f'Message: {json.dumps(ev.message, indent=2)}')
     for m in ev.message:
-        sv.logger.info(f'Message Type: {m.type}, Data: {json.dumps(m.data)}')
         if m.type == 'at' and m.data['qq'] != 'all':
             if sid is None:
                 sid = m.data['qq']
             elif delegate is None:
                 delegate = m.data['qq']
+    days = ev.message.extract_plain_text()
     if delegate and days and days.strip():
         delegate_days = list(map(int, days.split(',')))
     if sid is None:
         await bot.send(ev, '请@需要封印的群员哦w')
         return
     config = load_config()
-    config.add_seal(gid, sid, delegate, delegate_days)
+    msg = config.add_seal(gid, sid, delegate, delegate_days)
+    await bot.send(ev, '已封印' + msg)
 
 
 @sv.on_prefix("解封")
