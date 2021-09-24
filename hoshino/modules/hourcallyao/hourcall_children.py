@@ -10,13 +10,13 @@ from hoshino import R
 from hoshino.service import Service, priv
 
 sv_help = '''
-未成年解放提醒的说
-- 封印 @被封印者 [@代理人 [代理星期]]
-- 解封 @被封印者
-- 强化结界 日期
-- 削弱结界 日期
-- 查看结界
-- 查看封印
+被封印者解封提醒的说
+- 封印 @被封印者 [@代理人 [代理星期]]! (注意末尾要有感叹号): 将一个成员标记为被封印者，可以指定代理人和代理的星期。非代理星期和结界弱化日期提示被封印者，代理星期提示代理人。
+- 解封 @被封印者 !：移除被封印者的封印
+- 查看封印：查看本期的被封印者及其代理人
+- 强化结界 日期：指定特定日期结界强化，不会解封
+- 削弱结界 日期：指定特定日期结界弱化，会额外解封
+- 查看结界：查看结界的状态和特殊时点
 '''.strip()
 
 sv = Service(
@@ -184,6 +184,7 @@ class SealConfig:
             delegate = seal_config['delegate']
             delegate_days = seal_config.get('delegate_days', [])
             if delegate_days:
+                delegate_days = list(map(str, delegate_days))
                 return f'{atqq(qqid)}(代理人： {atqq(delegate)}，代理星期：{",".join(delegate_days)})'
             else:
                 return f'{atqq(qqid)}(代理人： {atqq(delegate)})'
@@ -239,7 +240,7 @@ async def ls_seals(bot, ev):
     config = load_config()
     config.clean_dates()
     msg = config.describe_group_seals(str(ev.group_id))
-    await bot.send(ev, msg, at_sender=True)
+    await bot.send(ev, msg)
 
 
 @sv.on_fullmatch(["查看结界"])
@@ -249,10 +250,11 @@ async def ls_special_days(bot, ev):
     now = datetime.now(pytz.timezone('Asia/Shanghai'))
     relax_day, day, dow, free_day = config.is_relax_day(now)
     msg = f'今日结界状态：\n' \
-          f'解封时段：{"20时会解封1小时" if relax_day else "不会解封"}\n' \
-          f'结界强度: {"强化" if free_day is None else ("脆弱" if free_day else "正常")}\n' \
-          f'结界强化日期：{", ".join(config.black_dates) if config.black_dates else "无"}\n' \
-          f'结界脆弱日期：{", ".join(config.free_dates) if config.free_dates else "无"}\n'
+          f'解封时段：{"20:00封印解除1小时" if relax_day else "不会解封"}\n' \
+          f'结界强度: {"强化" if free_day is None else ("弱化" if free_day else "正常")}\n' \
+          f'结界特殊时点：' \
+          f'强化日期：{", ".join(config.black_dates) if config.black_dates else "无"}\n' \
+          f'弱化日期：{", ".join(config.free_dates) if config.free_dates else "无"}'
     await bot.send(ev, msg)
 
 
@@ -285,6 +287,7 @@ async def unseal(bot, ev):
     gid = str(ev.group_id)
     ats = []
     sids = []
+    sv.logger.info(f'Message: {json.dumps(ev.message, indent=2)}')
     for m in ev.message:
         if m.type == 'at' and m.data['qq'] != 'all':
             sids.append(m.data['qq'])
@@ -307,7 +310,7 @@ async def add_black(bot, ev):
     cfg = load_config()
     try:
         day = cfg.add_black_date(text)
-        await bot.send(ev, "已经强化 " + day + " 的结界，当日的封印不会解除。", at_sender=True)
+        await bot.send(ev, "已经强化 " + day + " 的结界，当日的封印不会解除。")
     except ValueError as e:
         await bot.send(ev, str(e) + "\n格式：强化结界 (年/)月/日", at_sender=True)
         return
@@ -322,7 +325,7 @@ async def add_free(bot, ev):
     cfg = load_config()
     try:
         day = cfg.add_free_date(text)
-        await bot.send(ev, "已经削弱 " + day + " 的结界，当日的封印被临时解除。", at_sender=True)
+        await bot.send(ev, "已经削弱 " + day + " 的结界，当日的封印被临时解除。")
     except ValueError as e:
         await bot.send(ev, str(e) + "\n格式：削弱结界 (年/)月/日", at_sender=True)
         return
