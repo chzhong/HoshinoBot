@@ -10,7 +10,7 @@ from .. import _pcr_data
 from ..chara import download_chara_icon, roster
 
 # 卡池更新是否通知管理员
-NOTICE = False  
+NOTICE = False
 
 
 # 是否自动更新缺失的角色数据并下载图标, 是否重载花名册
@@ -48,7 +48,7 @@ async def update_pcrdata():
     对比本地和远程的_pcr_data.py, 自动补充本地没有的角色信息, 已有角色信息不受影响
     '''
     online_pcrdata = await get_online_pcrdata()
-    
+
     hoshino.logger.info('开始对比角色数据')
     if online_pcrdata == {}:
         return -1
@@ -142,13 +142,16 @@ def update_local_pool(online_pool) -> None:
     更新本地卡池文件, 并备份原卡池
     '''
     # 读取本地卡池
-    with open(local_pool_path, 'r', encoding='utf-8') as lf:
-        local_pool = json.load(lf)
+    if os.path.exists(local_pool_path):
+        with open(local_pool_path, 'r', encoding='utf-8') as lf:
+            local_pool = json.load(lf)
 
-    # 备份本地卡池
-    hoshino.logger.info(f'开始备份本地卡池')
-    with open(local_pool_backup_path, 'w', encoding='utf-8') as backup:
-        json.dump(local_pool, backup, indent=4, ensure_ascii=False)
+        # 备份本地卡池
+        hoshino.logger.info(f'开始备份本地卡池')
+        with open(local_pool_backup_path, 'w', encoding='utf-8') as backup:
+            json.dump(local_pool, backup, indent=4, ensure_ascii=False)
+    else:
+        local_pool = {}
 
     # 需要进行id转角色名的键
     ids_list = ['up', 'star3', 'star2', 'star1']
@@ -262,7 +265,7 @@ async def update_pool_sdj():
 
     status = await update_pool()
     if status == 0:
-        return 
+        return
     elif status < 1000 and NOTICE:
         msg = f'自动更新卡池时发生错误{status}'
         await bot.send_private_msg(seld_id=sid, user_id=master_id, message=msg)

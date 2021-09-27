@@ -330,16 +330,6 @@ async def add_free(bot, ev):
         await bot.send(ev, str(e) + "\n格式：削弱结界 (年/)月/日", at_sender=True)
         return
 
-
-def get_hour_call():
-    """从HOUR_CALLS中挑出一组时报，每日更换，一日之内保持相同"""
-    config = util.load_config(__file__)
-    now = datetime.now(pytz.timezone('Asia/Shanghai'))
-    hc_groups = config["HOUR_CALLS"]
-    g = hc_groups[now.day % len(hc_groups)]
-    return config[g]
-
-
 @sv.scheduled_job('cron', hour='20')
 async def hour_call():
     now = datetime.now(pytz.timezone('Asia/Shanghai'))
@@ -364,6 +354,6 @@ async def hour_call():
         sv.logger.info(f'向群 {gid} 的 {len(group_ats)} 名被封印人员发送提醒')
         msg = '封印已经解除，孩子们可以稍微放松一下了。' + ' '.join(group_ats) \
                 + str(R.img(f"children_release{random.randint(1, 4)}.jpg").cqcode)
-        await sv.bot.send_group_msg(int(gid), msg)
+        await sv.bot.send_group_msg(group_id=int(gid), message=msg)
     sv.logger.info('清理过期的特殊封印时点')
     config.clean_dates()
