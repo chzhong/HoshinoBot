@@ -68,7 +68,7 @@ async def loadConfig():
     push_times = {}
     room_states = {}
     config_path = path.join(path.dirname(__file__), 'config.json')
-    with open(config_path, 'r', encoding='utf8')as fp:
+    with open(config_path, 'r', encoding='utf8') as fp:
         conf = json.load(fp)
         messageLengthLimit = conf['message_length_limit']
         keys = conf['uid_bind'].keys()
@@ -90,7 +90,7 @@ async def loadConfig():
 
 def saveConfig():
     config_path = path.join(path.dirname(__file__), 'config.json')
-    with open(config_path, 'r+', encoding='utf8')as fp:
+    with open(config_path, 'r+', encoding='utf8') as fp:
         conf = json.load(fp)
         keys = push_uids.keys()
         conf['uid_bind'].clear()
@@ -107,7 +107,8 @@ async def check_uid_exsist(uid):
         'Referer': 'https://space.bilibili.com/{user_uid}/'.format(user_uid=uid)
     }
     try:
-        resp = await aiorequests.get('http://api.bilibili.com/x/space/acc/info?mid={user_uid}'.format(user_uid=uid), headers=header, timeout=20)
+        resp = await aiorequests.get('http://api.bilibili.com/x/space/acc/info?mid={user_uid}'.format(user_uid=uid),
+                                     headers=header, timeout=20)
         res = await resp.json()
         if res['code'] == 0:
             return True
@@ -122,7 +123,8 @@ async def get_user_name(uid):
         'Referer': 'https://space.bilibili.com/{user_uid}/'.format(user_uid=uid)
     }
     try:
-        resp = await aiorequests.get('http://api.bilibili.com/x/space/acc/info?mid={user_uid}'.format(user_uid=uid), headers=header, timeout=20)
+        resp = await aiorequests.get('http://api.bilibili.com/x/space/acc/info?mid={user_uid}'.format(user_uid=uid),
+                                     headers=header, timeout=20)
         res = await resp.json()
         return res['data']['name']
     except Exception as e:
@@ -262,8 +264,10 @@ async def check_bili_dynamic():
             'Referer': 'https://space.bilibili.com/{user_uid}/'.format(user_uid=uid)
         }
         try:
-            resp = await aiorequests.get('https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/space_history?host_uid={user_uid}'.format(user_uid=uid), headers=header,
-                                         timeout=20)
+            resp = await aiorequests.get(
+                'https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/space_history?host_uid={user_uid}'.format(
+                    user_uid=uid), headers=header,
+                timeout=20)
             res = await resp.json()
             if res is None:
                 sv.logger.info(f'检查{uid}时出错 request response is None')
@@ -299,7 +303,8 @@ async def check_bili_dynamic():
                         if picturesCount >= 9:
                             isBigPicture = True
                             for i in range(9):
-                                if pictures[i]['img_width'] != firstPictureSize[0] or pictures[i]['img_height'] != firstPictureSize[1]:
+                                if pictures[i]['img_width'] != firstPictureSize[0] or pictures[i]['img_height'] != \
+                                        firstPictureSize[1]:
                                     isBigPicture = False
                             if isBigPicture:
                                 pictureSrcs = []
@@ -310,7 +315,8 @@ async def check_bili_dynamic():
                         if picturesCount >= 6 and not isBigPicture:
                             isBigPicture = True
                             for i in range(6):
-                                if pictures[i]['img_width'] != firstPictureSize[0] or pictures[i]['img_height'] != firstPictureSize[1]:
+                                if pictures[i]['img_width'] != firstPictureSize[0] or pictures[i]['img_height'] != \
+                                        firstPictureSize[1]:
                                     isBigPicture = False
                             if isBigPicture:
                                 pictureSrcs = []
@@ -452,30 +458,29 @@ async def check_bili_dynamic():
                 'Referer': 'https://space.bilibili.com/{user_uid}/'.format(user_uid=uid),
                 'Cookie': bilibiliCookie
             }
-            resp = await aiorequests.get('https://api.live.bilibili.com/room/v1/Room/getRoomInfoOld?mid={user_id}'.format(user_id=uid), headers=header, timeout=20)
+            resp = await aiorequests.get('https://api.bilibili.com/x/space/acc/info?mid={user_id}'.format(user_id=uid),
+                                         headers=header, timeout=20)
             res = await resp.json()
-            if res['data']['liveStatus'] == 1 and not room_states[uid]:
+            if res['data']['live_room']['liveStatus'] == 1 and not room_states[uid]:
                 room_states[uid] = True
                 sendCQCode = []
                 userName = all_user_name[uid]
                 sendCQCode.append(userName)
                 sendCQCode.append('开播了：\n')
-                sendCQCode.append(res['data']['title'])
+                sendCQCode.append(res['data']['live_room']['title'])
                 sendCQCode.append('\n')
-                sendCQCode.append(getImageCqCode(res['data']['cover']))
+                sendCQCode.append(getImageCqCode(res['data']['live_room']['cover']))
                 sendCQCode.append('\n')
-                sendCQCode.append(res['data']['url'])
+                sendCQCode.append(res['data']['live_room']['url'])
                 msg = ''.join(sendCQCode)
                 if push_uids[uid][0] == 'all':
                     await broadcast(msg, sv_name='bili-dynamic')
                 else:
                     await broadcast(msg, push_uids[uid])
-            elif room_states[uid] and res['data']['liveStatus'] == 0:
+            elif room_states[uid] and res['data']['live_room']['liveStatus'] == 0:
                 room_states[uid] = False
                 sendCQCode = []
-                userResp = await aiorequests.get('https://api.bilibili.com/x/space/acc/info?mid={user_id}'.format(user_id=uid), timeout=20)
-                userRes = await userResp.json()
-                userName = userRes['data']['name']
+                userName = res['data']['name']
                 sendCQCode.append(userName)
                 sendCQCode.append('下播了')
                 msg = ''.join(sendCQCode)
@@ -525,6 +530,7 @@ async def make_big_image(image_urls, size, imageNum):
         return savePath
     pass
 
+
 @sv.on_fullmatch(('查看B站订阅', '查看订阅'))
 async def reload_config(bot, ev):
     if push_uids == {}:
@@ -543,6 +549,7 @@ async def reload_config(bot, ev):
     else:
         result = '本群未订阅任何B站动态'
     await bot.send(ev, result)
+
 
 @sv.on_fullmatch(('重新载入B站动态推送配置', '重新载入动态推送配置'))
 async def reload_config(bot, ev):
