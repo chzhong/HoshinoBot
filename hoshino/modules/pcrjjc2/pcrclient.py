@@ -35,7 +35,7 @@ defaultHeaders = {
         'GRAPHICS-DEVICE-NAME': 'Adreno (TM) 640',
         'BUNDLE-VER': '',
         'SID': '564fd204ec7d8f93c7530f3203f0f595',
-        'APP-VER': '4.9.6',
+        'APP-VER': '19.19.19',
         'RES-KEY': 'd145b29050641dac2f8b19df0afe0e59',
         'DEVICE': '2',
         'RES-VER': '10002200',
@@ -53,6 +53,7 @@ account_info = {
         "channel": 65
         }
 
+AES_IV = b'7Fk9Lm3Np8Qr4Sv2'
 
 class ApiException(Exception):
     def __init__(self, message, code):
@@ -86,26 +87,26 @@ class pcrclient:
 
     @staticmethod
     def pack(data: object, key: bytes) -> bytes:
-        aes = AES.new(key, AES.MODE_CBC, b'ha4nBYA2APUD6Uv1')
+        aes = AES.new(key, AES.MODE_CBC, AES_IV)
         return aes.encrypt(pcrclient.add_to_16(packb(data,
             use_bin_type = False
         ))) + key
 
     @staticmethod
     def encrypt(data: str, key: bytes) -> bytes:
-        aes = AES.new(key, AES.MODE_CBC, b'ha4nBYA2APUD6Uv1')
+        aes = AES.new(key, AES.MODE_CBC, AES_IV)
         return aes.encrypt(pcrclient.add_to_16(data.encode('utf8'))) + key
 
     @staticmethod
     def decrypt(data: bytes):
         data = b64decode(data.decode('utf8'))
-        aes = AES.new(data[-32:], AES.MODE_CBC, b'ha4nBYA2APUD6Uv1')
+        aes = AES.new(data[-32:], AES.MODE_CBC, AES_IV)
         return aes.decrypt(data[:-32]), data[-32:]
 
     @staticmethod
     def unpack(data: bytes):
         data = b64decode(data.decode('utf8'))
-        aes = AES.new(data[-32:], AES.MODE_CBC, b'ha4nBYA2APUD6Uv1')
+        aes = AES.new(data[-32:], AES.MODE_CBC, AES_IV)
         dec = aes.decrypt(data[:-32])
         return unpackb(dec[:-dec[-1]],
             strict_map_key = False
@@ -122,7 +123,9 @@ class pcrclient:
                 data = pcrclient.pack(request, key) if crypted else str(request).encode('utf8'),
                 headers = self.headers,
                 timeout = 10)).content
-            #  print(response)
+            # print(apiurl, response)
+            if len(response) == 0:
+                return
             response = pcrclient.unpack(response)[0] if crypted else loads(response)
 
             data_headers = response['data_headers']
@@ -170,7 +173,7 @@ class pcrclient:
                 await sleep(60)
 
         ver = manifest['required_manifest_ver']
-        print(f'using manifest ver = {ver}')
+        # print(f'using manifest ver = {ver}')
         self.headers['MANIFEST-VER'] = str(ver)
         lres = await self.callapi('/tool/sdk_login', {
             'uid': str(self.uid),
@@ -188,7 +191,7 @@ class pcrclient:
         if not gamestart['now_tutorial']:
             raise Exception("该账号没过完教程!")
             
-        await self.callapi('/check/check_agreement', {})
+        # await self.callapi('/check/check_agreement', {})
 
         await self.callapi('/load/index', {
             'carrier': 'OPPO'
