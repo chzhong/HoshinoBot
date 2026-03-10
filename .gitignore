@@ -25,7 +25,6 @@ hoshino/modules/umamusume
 TRASH/
 kokkoro-OLD/
 *.bak
-*.*_*
 
 # Mac
 .DS_Store

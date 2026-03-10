@@ -1,0 +1,580 @@
+{
+    "user_info": {
+        "viewer_id": 1184975198736,
+        "user_name": "紫泪魔瞳i",
+        "user_comment": "请多关照。",
+        "team_level": 181,
+        "team_exp": 511758,
+        "emblem": {
+            "emblem_id": 10201273,
+            "ex_value": 0
+        },
+        "last_login_time": 1670027077,
+        "arena_rank": 32,
+        "arena_group": 19,
+        "arena_time": 1654567200,
+        "grand_arena_rank": 21,
+        "grand_arena_group": 1,
+        "grand_arena_time": 1664506800,
+        "open_story_num": 1877,
+        "unit_num": 127,
+        "total_power": 3134076,
+        "tower_cleared_floor_num": 480,
+        "tower_cleared_ex_quest_count": 27,
+        "friend_num": 8
+    },
+    "quest_info": {
+        "normal_quest": [
+            0,
+            0,
+            564
+        ],
+        "hard_quest": [
+            0,
+            0,
+            120
+        ],
+        "very_hard_quest": [
+            0,
+            0,
+            21
+        ]
+    },
+    "clan_name": "登锋履刃何妨马革裹尸",
+    "favorite_unit": {
+        "id": 109801,
+        "unit_rarity": 5,
+        "battle_rarity": 0,
+        "unit_level": 181,
+        "promotion_level": 14,
+        "skin_data": {
+            "icon_skin_id": 0,
+            "sd_skin_id": 0,
+            "still_skin_id": 0,
+            "motion_id": 0
+        }
+    },
+    "own_clan_role": 0,
+    "friend_support_units": [
+        {
+            "unit_data": {
+                "id": 101201,
+                "unit_rarity": 6,
+                "battle_rarity": 0,
+                "unit_level": 181,
+                "promotion_level": 19,
+                "unit_exp": 5345990,
+                "union_burst": [
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "main_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "ex_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    }
+                ],
+                "equip_slot": [
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    }
+                ],
+                "unique_equip_slot": [
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 27490,
+                        "rank": 12
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0,
+                        "rank": 0
+                    }
+                ],
+                "bonus_param": {
+                    "matk": 830,
+                    "mcrt": 40
+                },
+                "skin_data": {
+                    "icon_skin_id": 0,
+                    "sd_skin_id": 0,
+                    "still_skin_id": 0,
+                    "motion_id": 0
+                }
+            },
+            "position": 1
+        },
+        {
+            "unit_data": {
+                "id": 101101,
+                "unit_rarity": 6,
+                "battle_rarity": 0,
+                "unit_level": 181,
+                "promotion_level": 18,
+                "unit_exp": 5340538,
+                "union_burst": [
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "main_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "ex_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    }
+                ],
+                "equip_slot": [
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    }
+                ],
+                "unique_equip_slot": [
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 27490,
+                        "rank": 12
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0,
+                        "rank": 0
+                    }
+                ],
+                "bonus_param": {
+                    "atk": 840,
+                    "crt": 10,
+                    "accuracy": 20
+                },
+                "skin_data": {
+                    "icon_skin_id": 0,
+                    "sd_skin_id": 0,
+                    "still_skin_id": 0,
+                    "motion_id": 0
+                }
+            },
+            "position": 2
+        }
+    ],
+    "clan_support_units": [
+        {
+            "unit_data": {
+                "id": 106101,
+                "unit_rarity": 5,
+                "battle_rarity": 0,
+                "unit_level": 181,
+                "promotion_level": 19,
+                "unit_exp": 5343956,
+                "union_burst": [
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "main_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "ex_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    }
+                ],
+                "equip_slot": [
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    }
+                ],
+                "unique_equip_slot": [
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 27490,
+                        "rank": 12
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0,
+                        "rank": 0
+                    }
+                ],
+                "unlock_rarity_6_item": {
+                    "slot_1": 0,
+                    "slot_2": 0,
+                    "slot_3": 0
+                },
+                "bonus_param": {
+                    "atk": 240,
+                    "crt": 35,
+                    "erec": 60
+                },
+                "skin_data": {
+                    "icon_skin_id": 0,
+                    "sd_skin_id": 0,
+                    "still_skin_id": 0,
+                    "motion_id": 0
+                }
+            },
+            "position": 1
+        },
+        {
+            "unit_data": {
+                "id": 100101,
+                "unit_rarity": 6,
+                "battle_rarity": 0,
+                "unit_level": 181,
+                "promotion_level": 18,
+                "unit_exp": 5344515,
+                "union_burst": [
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "main_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "ex_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    }
+                ],
+                "equip_slot": [
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    }
+                ],
+                "unique_equip_slot": [
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 27490,
+                        "rank": 12
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0,
+                        "rank": 0
+                    }
+                ],
+                "bonus_param": {
+                    "hp": 700,
+                    "atk": 785,
+                    "crt": 150
+                },
+                "skin_data": {
+                    "icon_skin_id": 0,
+                    "sd_skin_id": 0,
+                    "still_skin_id": 0,
+                    "motion_id": 0
+                }
+            },
+            "position": 2
+        },
+        {
+            "unit_data": {
+                "id": 106801,
+                "unit_rarity": 5,
+                "battle_rarity": 0,
+                "unit_level": 181,
+                "promotion_level": 18,
+                "unit_exp": 5345122,
+                "union_burst": [
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "main_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "ex_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    }
+                ],
+                "equip_slot": [
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    }
+                ],
+                "unique_equip_slot": [
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0,
+                        "rank": 0
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0,
+                        "rank": 0
+                    }
+                ],
+                "unlock_rarity_6_item": {
+                    "slot_1": 0,
+                    "slot_2": 0,
+                    "slot_3": 0
+                },
+                "bonus_param": {
+                    "atk": 240,
+                    "mdef": 4,
+                    "erec": 210
+                },
+                "skin_data": {
+                    "icon_skin_id": 0,
+                    "sd_skin_id": 0,
+                    "still_skin_id": 0,
+                    "motion_id": 0
+                }
+            },
+            "position": 3
+        },
+        {
+            "unit_data": {
+                "id": 112001,
+                "unit_rarity": 5,
+                "battle_rarity": 0,
+                "unit_level": 181,
+                "promotion_level": 19,
+                "unit_exp": 5340540,
+                "union_burst": [
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "main_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 181
+                    }
+                ],
+                "ex_skill": [
+                    {None: 1,
+                        "skill_level": 181
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    },
+                    {None: 1,
+                        "skill_level": 0
+                    }
+                ],
+                "equip_slot": [
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0
+                    },
+                    {
+                        "is_slot": 1,
+                        "enhancement_pt": 1800
+                    }
+                ],
+                "unique_equip_slot": [
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0,
+                        "rank": 0
+                    },
+                    {
+                        "is_slot": 0,
+                        "enhancement_pt": 0,
+                        "rank": 0
+                    }
+                ],
+                "unlock_rarity_6_item": {
+                    "slot_1": 0,
+                    "slot_2": 0,
+                    "slot_3": 0
+                },
+                "bonus_param": {
+                    "matk": 720,
+                    "mcrt": 105,
+                    "erec": 180
+                },
+                "skin_data": {
+                    "icon_skin_id": 0,
+                    "sd_skin_id": 0,
+                    "still_skin_id": 0,
+                    "motion_id": 0
+                }
+            },
+            "position": 4
+        }
+    ]
+}
