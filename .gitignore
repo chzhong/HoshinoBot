@@ -14,6 +14,7 @@ img/
 imgs/
 image/
 images/
+res
 
 # 非公开的组件
 hoshino/modules/pcrclanbattle/clanbattlev3
@@ -23,6 +24,11 @@ hoshino/modules/umamusume
 # 暂时删除的代码
 TRASH/
 kokkoro-OLD/
+*.bak
+*.*_*
+
+# Mac
+.DS_Store
 
 # VSCode Folder
 .vscode/
