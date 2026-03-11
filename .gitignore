@@ -123,6 +123,11 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.envrc
+
+# AI
+CHAT.txt
+CLAUDE.md
 
 # Spyder project settings
 .spyderproject
@@ -136,3 +141,5 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+

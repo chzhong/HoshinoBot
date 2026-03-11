@@ -1,5 +1,10 @@
-binds.json
-wanted_binds.json
+binds*.json
+wanted_binds*.json
+wanted*.json
+config.yaml
+subscriptions*.json
+*.png
 *.py.*
 *.json.*
 fonts/
+tests/ 

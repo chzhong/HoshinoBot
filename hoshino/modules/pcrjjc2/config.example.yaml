@@ -1,0 +1,46 @@
+# pcrjjc2 配置文件
+# 时间段定义：按顺序匹配，settlement 优先（如果当前时间匹配多个，取第一个匹配的）
+periods:
+  - name: settlement
+    description: 结算时段（15:00排名刷新）
+    cron: "0 15 * * *"   # 每天15:00开始
+  - name: critical
+    description: 卡点时间（每日排名结算前关键期）
+    cron: "50-59 14 * * *"   # 每天14:50～14:59开始
+  - name: hot
+    description: 击剑时段（每日排名结算前活跃期）
+    cron: "0-49 14 * * *"   # 每天14:00～14:50开始
+  - name: cold
+    description: 宵禁时段（深夜低活跃期）
+    cron: "* 2-6 * * *"    # 每天02:00开始
+subscriptions:
+  check_config:
+    settlement:
+      interval: 0   # 0 = 仅在结算点触发一次
+      delay: 0
+    default:
+      interval: 1
+      delay: 15
+  items:
+    # 1234567890:
+    #   - id: 1012345678901
+    #     gid: 987654321
+    #     arena_on: true
+    #     grand_arena_on: true
+    #   - id: 1012345678902
+    #     gid: 987654321
+    #     arena_on: true
+    #     grand_arena_on: true
+    # 1234567891:
+    #   - id: 1012345678903
+    #     gid: 987654321
+    #     arena_on: false
+    #     grand_arena_on: true
+    #   - id: 1012345678904
+    #     gid: 987654321
+    #     arena_on: true
+    #     grand_arena_on: false
+    #   - id: 1012345678905
+    #     gid: 987654321
+    #     arena_on: true
+    #     grand_arena_on: true
