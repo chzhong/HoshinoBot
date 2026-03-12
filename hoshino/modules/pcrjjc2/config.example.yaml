@@ -13,7 +13,7 @@ periods:
   - name: cold
     description: 宵禁时段（深夜低活跃期）
     cron: "* 2-6 * * *"    # 每天02:00开始
-subscriptions:
+subscription:
   check_config:
     settlement:
       interval: 0   # 0 = 仅在结算点触发一次
@@ -22,25 +22,57 @@ subscriptions:
       interval: 1
       delay: 15
   items:
+    # QQ号:
+    #   - id: PCR_UID（13位）
+    #     gid: 通知群号
+    #     # arena_on: true     # 省略 = true
+    #     # grand_arena_on: true
+    # 示例：
     # 1234567890:
-    #   - id: 1012345678901
-    #     gid: 987654321
-    #     arena_on: true
-    #     grand_arena_on: true
-    #   - id: 1012345678902
-    #     gid: 987654321
-    #     arena_on: true
-    #     grand_arena_on: true
-    # 1234567891:
-    #   - id: 1012345678903
-    #     gid: 987654321
+    #   - id: '1012345678901'
+    #     gid: '987654321'
+    #   - id: '1012345678902'
+    #     gid: '987654321'
     #     arena_on: false
-    #     grand_arena_on: true
-    #   - id: 1012345678904
-    #     gid: 987654321
-    #     arena_on: true
-    #     grand_arena_on: false
-    #   - id: 1012345678905
-    #     gid: 987654321
-    #     arena_on: true
-    #     grand_arena_on: true
+wanted_list:
+  # 通缉检测频率（按时间段，与 subscription 独立）
+  # delay=20(默认)时可简写为纯数字；settlement 强制 interval=0 无法覆盖
+  check_config:
+    default: 5        # 默认5分钟检测一次（delay=20）
+    hot:
+      interval: 2
+      delay: 5
+    critical:
+      interval: 1
+      delay: 0
+    cold: 15          # 深夜15分钟一次（delay=20）
+    # settlement 无需配置，自动强制为 interval=0
+  # 群通缉：每条可为纯 uid 字符串（全默认）或含附加字段的 dict
+  # 字段说明：
+  #   id: PCR_UID（13位，必填）
+  #   note: 备注（可选）
+  #   watch_at: 监控范围，3=jjc+pjjc(默认), 1=jjc, 2=pjjc, 0=不监控
+  #   notice_level: 通知级别，1=普通(默认), 2=高频(settlement后降回1),
+  #                 3=高频(次日5点后降回1), 4=高频(永久)
+  #   arena_on: jjc排名通知开关（省略=true）
+  #   grand_arena_on: pjjc排名通知开关（省略=true）
+  group: {}
+  # 示例：
+  # group:
+  #   '987654321':
+  #     - '1012345678901'           # 全默认，简写为 uid 字符串
+  #     - id: '1012345678902'
+  #       note: 重点目标
+  #       notice_level: 2
+  #     - id: '1012345678903'
+  #       arena_on: false           # 只监控 pjjc
+  # 个人通缉：以 QQ 号为 key，每条可独立指定通知群
+  personal: {}
+  # 示例：
+  # personal:
+  #   '1234567890':
+  #     - id: '1012345678901'
+  #       gid: '987654321'          # 通知到哪个群（必填）
+  #       note: 仇人
+  #     - id: '1012345678902'
+  #       gid: '111222333'          # 每条可发到不同群

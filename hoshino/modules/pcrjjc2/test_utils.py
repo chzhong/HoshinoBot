@@ -131,6 +131,233 @@ parsed_with_default = _parse_check_configs({"default": {"interval": 3}, "hot": {
 check("parse: 已有default不覆盖",              parsed_with_default["default"].interval, 3)
 check("parse: settlement仍强制=0",             parsed_with_default["settlement"].interval, 0)
 
+# ── 1b. config_loader: save/load round-trip ───────────────────────────
+section("config_loader: save/load round-trip")
+
+import json
+import os
+import tempfile
+
+from config_loader import _DEFAULT_WANTED_CHECK_CONFIGS, save_config
+from schema import (
+    NOTICE_LEVEL_ATTENTION,
+    NOTICE_LEVEL_DEFAULT,
+    WATCH_AT_BOTH,
+    SubscriptionConfig,
+    SubscriptionItem,
+    WantedItem,
+    WantedListConfig,
+)
+
+
+def _make_full_config():
+    """构造含完整数据的 Config 用于 round-trip 测试。"""
+    from config_loader import _DEFAULT_PERIODS, _DEFAULT_WANTED_CHECK_CONFIGS, _DEFAULT_SUB_CHECK_CONFIGS
+    from schema import Config
+
+    sub_items = {
+        "1234567890": [
+            SubscriptionItem(id="1012345678901", gid="987654321"),
+            SubscriptionItem(id="1012345678902", gid="987654321", arena_on=False),
+        ],
+        "1234567891": [
+            SubscriptionItem(
+                id="1012345678903", gid="987654321", grand_arena_on=False
+            ),
+        ],
+    }
+    group_wanted = {
+        "987654321": [
+            WantedItem(id="1012345678901", gid="987654321"),           # 全默认 -> uid字符串
+            WantedItem(id="1012345678902", gid="987654321", note="坏人"),
+            WantedItem(id="1012345678903", gid="987654321", arena_on=False),
+            WantedItem(
+                id="1012345678904", gid="987654321",
+                notice_level=NOTICE_LEVEL_ATTENTION,
+            ),
+        ],
+    }
+    personal_wanted = {
+        "1234567890": [
+            WantedItem(
+                id="1012345678905", gid="987654321", by="1234567890", note="仇人"
+            ),
+        ],
+    }
+    return Config(
+        version=2,
+        periods=_DEFAULT_PERIODS,
+        subscription=SubscriptionConfig(
+            check_config=_DEFAULT_SUB_CHECK_CONFIGS, items=sub_items
+        ),
+        wanted_list=WantedListConfig(
+            check_config=_DEFAULT_WANTED_CHECK_CONFIGS,
+            group=group_wanted,
+            personal=personal_wanted,
+        ),
+    )
+
+
+# ── round-trip helper ──
+def _round_trip(cfg):
+    """保存到临时文件再 load 回来，返回 (yaml_str, loaded_cfg)。"""
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+    ) as f:
+        tmp = f.name
+    try:
+        save_config(cfg, tmp)
+        with open(tmp, encoding="utf-8") as f:
+            yaml_str = f.read()
+        loaded = load_config(tmp)
+    finally:
+        os.unlink(tmp)
+    return yaml_str, loaded
+
+
+# ── 1. 无数据默认 Config 保存/恢复 ──
+default_cfg = load_config()  # 无 config.yaml 时的默认值
+yaml_str, rt = _round_trip(default_cfg)
+check("RT-default: periods 数量一致", len(rt.periods), len(default_cfg.periods))
+check(
+    "RT-default: subscription.check_config default 存在",
+    "default" in rt.subscription.check_config,
+    True,
+)
+check("RT-default: wanted_list.group 为空", rt.wanted_list.group, {})
+check("RT-default: wanted_list.personal 为空", rt.wanted_list.personal, {})
+
+# ── 2. 完整数据 round-trip ──
+full_cfg = _make_full_config()
+yaml_str, rt2 = _round_trip(full_cfg)
+
+# subscription items
+check(
+    "RT-full: subscription qq 数量",
+    len(rt2.subscription.items),
+    2,
+)
+rt2_subs_0 = rt2.subscription.items.get("1234567890", [])
+check("RT-full: sub[0] id", rt2_subs_0[0].id, "1012345678901")
+check("RT-full: sub[0] gid", rt2_subs_0[0].gid, "987654321")
+check("RT-full: sub[0] arena_on=True（默认省略后恢复）", rt2_subs_0[0].arena_on, True)
+check("RT-full: sub[1] arena_on=False（保留）", rt2_subs_0[1].arena_on, False)
+check("RT-full: sub[1] grand_arena_on=True（默认省略后恢复）", rt2_subs_0[1].grand_arena_on, True)
+
+# wanted_list group
+rt2_group = rt2.wanted_list.group.get("987654321", [])
+check("RT-full: group 通缉数量=4", len(rt2_group), 4)
+check("RT-full: group[0] id", rt2_group[0].id, "1012345678901")
+check("RT-full: group[0] arena_on=True（默认恢复）", rt2_group[0].arena_on, True)
+check("RT-full: group[0] notice_level=1（默认恢复）", rt2_group[0].notice_level, NOTICE_LEVEL_DEFAULT)
+check("RT-full: group[1] note 保留", rt2_group[1].note, "坏人")
+check("RT-full: group[2] arena_on=False 保留", rt2_group[2].arena_on, False)
+check("RT-full: group[3] notice_level=2 保留", rt2_group[3].notice_level, NOTICE_LEVEL_ATTENTION)
+
+# wanted_list personal
+rt2_personal = rt2.wanted_list.personal.get("1234567890", [])
+check("RT-full: personal 数量=1", len(rt2_personal), 1)
+check("RT-full: personal[0] id", rt2_personal[0].id, "1012345678905")
+check("RT-full: personal[0] gid", rt2_personal[0].gid, "987654321")
+check("RT-full: personal[0] note 保留", rt2_personal[0].note, "仇人")
+check("RT-full: personal[0] by 不在 personal_item（从 qq key 恢复）",
+      rt2_personal[0].by, "1234567890")
+
+# wanted_list check_config round-trip
+rt2_wcc = rt2.wanted_list.check_config
+check("RT-full: wanted cc default interval=5", rt2_wcc.get("default", None) and rt2_wcc["default"].interval, 5)
+check("RT-full: wanted cc hot interval=2", rt2_wcc.get("hot", None) and rt2_wcc["hot"].interval, 2)
+check("RT-full: wanted cc cold delay=30", rt2_wcc.get("cold", None) and rt2_wcc["cold"].delay, 30)
+check("RT-full: wanted cc settlement interval=0（强制）", rt2_wcc["settlement"].interval, 0)
+
+# ── 3. yaml 简化写法验证 ──
+# 全默认 WantedItem 应序列化为纯 uid 字符串（而非 dict）
+import yaml as _yaml
+raw = _yaml.safe_load(yaml_str)
+group_raw = raw.get("wanted_list", {}).get("group", {}).get("987654321", [])
+check(
+    "yaml-simplified: group[0] 全默认序列化为 uid 字符串",
+    isinstance(group_raw[0], str),
+    True,
+)
+check(
+    "yaml-simplified: group[0] uid 值正确",
+    group_raw[0],
+    "1012345678901",
+)
+check(
+    "yaml-simplified: group[1] 有备注序列化为 dict",
+    isinstance(group_raw[1], dict),
+    True,
+)
+check(
+    "yaml-simplified: group[1] dict 中无 gid 字段（群通缉省略）",
+    "gid" not in group_raw[1],
+    True,
+)
+check(
+    "yaml-simplified: group[1] dict 中无 by 字段（空时省略）",
+    "by" not in group_raw[1],
+    True,
+)
+
+# subscription 全默认条目应省略 arena_on/grand_arena_on
+sub_raw = raw.get("subscription", {}).get("items", {}).get("1234567890", [])
+check(
+    "yaml-simplified: sub[0] 全默认省略 arena_on",
+    "arena_on" not in sub_raw[0],
+    True,
+)
+check(
+    "yaml-simplified: sub[1] arena_on=False 保留",
+    sub_raw[1].get("arena_on") == False,
+    True,
+)
+
+# check_config 纯 interval（delay=20）时简化为整数
+cc_raw = raw.get("wanted_list", {}).get("check_config", {})
+check(
+    "yaml-simplified: wanted cc default(interval=5,delay=20) 简化为整数",
+    cc_raw.get("default") == 5,
+    True,
+)
+check(
+    "yaml-simplified: wanted cc hot(delay=5≠20) 保存为 dict",
+    isinstance(cc_raw.get("hot"), dict),
+    True,
+)
+
+# ── 4. 旧格式 config.yaml（无 wanted_list 段）能正常加载 ──
+old_yaml = """
+subscription:
+  check_config:
+    default: 1
+  items:
+    '9876543210':
+      - id: '1012345678901'
+        gid: '111222333'
+"""
+with tempfile.NamedTemporaryFile(
+    mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+) as f:
+    f.write(old_yaml)
+    old_path = f.name
+try:
+    old_cfg = load_config(old_path)
+finally:
+    os.unlink(old_path)
+check("旧格式: wanted_list.group 为空", old_cfg.wanted_list.group, {})
+check("旧格式: wanted_list.check_config default 存在", "default" in old_cfg.wanted_list.check_config, True)
+check("旧格式: subscription items 正常加载", len(old_cfg.subscription.items), 1)
+check("旧格式: qq key 为字符串", "9876543210" in old_cfg.subscription.items, True)
+
+# ── 5. 写回后 gid/qq key 为引号字符串不变为 int ──
+check(
+    "yaml key: qq/gid 写回 yaml 后仍为 str（yaml 加引号）",
+    isinstance(list(rt2.subscription.items.keys())[0], str),
+    True,
+)
+
 # ── 2. subscriptions ──────────────────────────────────────────────────
 section("subscriptions: SubscriptionManager")
 

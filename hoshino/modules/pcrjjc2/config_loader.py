@@ -19,20 +19,24 @@ from schema import (
     CheckConfigMapDict,
     Config,
     ConfigDict,
+    GroupWantedListMap,
     Period,
     PeriodDict,
+    PersonalWantedListMap,
     SubscriptionConfig,
     SubscriptionConfigDict,
     SubscriptionItem,
     SubscriptionMap,
+    WantedItem,
+    WantedListConfig,
+    WantedListConfigDict,
 )
 
 TZ_CST = timezone(timedelta(hours=8))
 
 
-CURRENT_CONFIG_VERSION: Final = 2
 FIRST_CONFIG_VERSION: Final = 2
-
+CURRENT_CONFIG_VERSION: Final = 2
 
 _DEFAULT_CHECK_CONFIG = CheckConfig(interval=5, delay=20)
 
@@ -126,19 +130,43 @@ def _parse_subscriptions(raw: SubscriptionConfigDict) -> SubscriptionConfig:
     else:
         check_config = _DEFAULT_SUB_CHECK_CONFIGS
     items: SubscriptionMap = {}
-    if "items" in raw:
-        items_map = raw["items"]
-        for qq, subs in items_map.items():
-            sub_item: List[SubscriptionItem] = []
-            for sub in subs:
-                sub_item.append(SubscriptionItem.from_dict(sub))
-            items[qq] = sub_item
+    for qq, subs in (raw.get("items") or {}).items():
+        sub_item: List[SubscriptionItem] = []
+        for sub in (subs or []):
+            sub_item.append(SubscriptionItem.from_dict(sub))
+        items[str(qq)] = sub_item
     return SubscriptionConfig(check_config=check_config, items=items)
+
+
+def _parse_wanted_list(raw: WantedListConfigDict) -> WantedListConfig:
+    check_config_dict: Optional[CheckConfigMapDict] = None
+    if "check_config" in raw:
+        check_config_dict = raw["check_config"]
+    if check_config_dict:
+        check_config = _parse_check_configs(check_config_dict, _DEFAULT_WANTED_CONFIG)
+    else:
+        check_config = _DEFAULT_WANTED_CHECK_CONFIGS
+    group: GroupWantedListMap = {}
+    for gid, subs in (raw.get("group") or {}).items():
+        sub_item: List[WantedItem] = []
+        for sub in (subs or []):
+            sub_item.append(WantedItem.from_group_item(str(gid), sub))
+        group[str(gid)] = sub_item
+    personal: PersonalWantedListMap = {}
+    for qq, subs in (raw.get("personal") or {}).items():
+        sub_item = []
+        for sub in (subs or []):
+            sub_item.append(WantedItem.from_personal_item(str(qq), sub))
+        personal[str(qq)] = sub_item
+    return WantedListConfig(check_config=check_config, group=group, personal=personal)
+
+
+_DEFAULT_CONFIG_PATH = join(dirname(__file__), "config.yaml")
 
 
 def load_config(config_path: Optional[str] = None) -> Config:
     """加载 config.yaml 并解析为强类型 Config。文件不存在时返回内置默认值。"""
-    path = config_path or join(dirname(__file__), "config.yaml")
+    path = config_path or _DEFAULT_CONFIG_PATH
     if not exists(path):
         return deepcopy(_DEFAULT_CONFIG)
 
@@ -148,11 +176,13 @@ def load_config(config_path: Optional[str] = None) -> Config:
     version = data.get("version", FIRST_CONFIG_VERSION)
     periods = _parse_periods(data.get("periods", []))
     subscriptions = _parse_subscriptions(data.get("subscription", {}))
+    wanted_list = _parse_wanted_list(data.get("wanted_list", {}))
 
     return Config(
         version=version,
         periods=periods,
         subscription=subscriptions,
+        wanted_list=wanted_list,
     )
 
 
@@ -191,7 +221,7 @@ def get_current_period(
 
 def save_config(config: Config, config_path: Optional[str] = None) -> None:
     """将 Config 序列化写回 config.yaml。"""
-    path = config_path or join(dirname(__file__), "config.yaml")
+    path = config_path or _DEFAULT_CONFIG_PATH
     with open(path, "w", encoding="utf-8") as f:
         yaml.dump(
             config.to_dict(),

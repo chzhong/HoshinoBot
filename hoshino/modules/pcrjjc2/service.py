@@ -10,6 +10,7 @@ service.py - pcrjjc2 Controller 层（USE_NEW_LOGIC = True 时生效）
 """
 
 import json
+import os
 import time
 from asyncio import Lock
 from os.path import dirname, exists, join
@@ -57,7 +58,11 @@ cache_db = jjcdata()
 
 _curpath = dirname(__file__)
 _binds_path = join(_curpath, "binds.json")
+_binds_bak_path = join(_curpath, "binds.json.bak")
 _wanted_path = join(_curpath, "wanted_binds.json")
+_wanted_bak_path = join(_curpath, "wanted_binds.json.bak")
+
+BACKUP_MIGRATED = False
 
 _cfg = load_config()
 _arena_svc = ArenaService(_cfg, cache_db, sv.logger)
@@ -69,6 +74,8 @@ if not _arena_svc.subscription_manager._items and exists(_binds_path):
         _old_binds: LegacyBindConfig = json.load(_fp)
     _arena_svc.subscription_manager.migrate_from_old(_old_binds.get("arena_bind", {}))
     _arena_svc.save_config()
+    if BACKUP_MIGRATED:
+        os.rename(_binds_path, _binds_bak_path)
 
 # 通缉/关注旧格式数据：{gid: [uid, ...]}
 _wanted_root: LegacyWantedConfig = {"wanted_bind": {}, "watch_bind": {}}
