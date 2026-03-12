@@ -16,15 +16,15 @@ from asyncio import Lock
 from os.path import dirname, exists, join
 from typing import Optional
 
-from arena_client import ApiException, get_profile
-from arena_service import ArenaService, render_subscription_status_cq
-from config_loader import load_config
-from jjcdata import jjcdata
-from safeservice import SafeService
-from subscriptions import LegacyBindConfig
-from utils import send_summary
-from wanted_manager import LegacyWantedBind, LegacyWantedConfig, LegacyWatchBind
-from wanted_service import legacy_check_wanted_dict, legacy_should_check
+from .arena_client import ApiException, get_profile
+from .arena_service import ArenaService, render_subscription_status_cq
+from .config_loader import load_config
+from .jjcdata import jjcdata
+from .safeservice import SafeService
+from .subscriptions import LegacyBindConfig
+from .utils import send_summary
+from .wanted_manager import LegacyWantedBind, LegacyWantedConfig, LegacyWatchBind
+from .wanted_service import legacy_check_wanted_dict, legacy_should_check
 
 sv_help = """【订阅管理】
 [竞技场绑定 uid] 追加绑定（最多8个），默认双场推送

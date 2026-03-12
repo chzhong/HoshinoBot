@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, TypedDict
 
 from typing_extensions import TypeAlias
 
-from schema import SubscriptionItem
+from .schema import SubscriptionItem
 
 _MAX_SUBS = 8
 

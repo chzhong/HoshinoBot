@@ -9,8 +9,8 @@ from asyncio import Lock
 from json import load
 from os.path import dirname, join
 
-from jjcdata import charadata
-from pcrclient import ApiException, pcrclient
+from .jjcdata import charadata
+from .pcrclient import ApiException, pcrclient
 
 _curpath = dirname(__file__)
 

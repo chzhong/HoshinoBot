@@ -13,7 +13,7 @@ from os.path import dirname, exists, join
 from typing import Dict, Final, List, Optional
 
 import yaml
-from schema import (
+from .schema import (
     CheckConfig,
     CheckConfigMap,
     CheckConfigMapDict,

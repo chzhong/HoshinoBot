@@ -18,13 +18,13 @@ from datetime import datetime
 from traceback import format_exc
 from typing import Dict, List, Optional, Tuple
 
-from arena_client import ApiException, _improve_user_info, get_profile, get_profile_raw
-from config_loader import TZ_CST, get_check_config, get_current_period, save_config
-from jjcdata import jjcdata
+from .arena_client import ApiException, _improve_user_info, get_profile, get_profile_raw
+from .config_loader import TZ_CST, get_check_config, get_current_period, save_config
+from .jjcdata import jjcdata
 from nonebot import get_bot
-from schema import Config, SubscriptionItem
-from subscriptions import SubscriptionManager
-from table_image import Cell, StyledText, render_table_as_cq
+from .schema import Config, SubscriptionItem
+from .subscriptions import SubscriptionManager
+from .table_image import Cell, StyledText, render_table_as_cq
 
 
 @dataclass
@@ -401,7 +401,7 @@ def render_subscription_status_cq(rows_data: List[SubStatusRow]) -> str:
     将订阅状态行列表渲染为富文本图片表格，返回 CQ 码字符串。
     由 service.py 的 send_arena_sub_status handler 调用。
     """
-    from table_image import _FONT_SIZE  # 读取当前字号常量，保持一致
+    from .table_image import _FONT_SIZE  # 读取当前字号常量，保持一致
 
     headers = ["#", "昵称", "UID", "通知群", "jjc", "pjjc", "通知"]
     rows = []
