@@ -11,7 +11,7 @@ from traceback import format_exc
 from .safeservice import SafeService
 from datetime import datetime
 from typing import Dict
-from .utils import send_summary
+from .legacy_utils import send_summary
 
 import time
 import pytz

@@ -7,4 +7,6 @@ subscriptions*.json
 *.py.*
 *.json.*
 fonts/
-tests/ 
+tests/*
+!tests/__init__.py
+!tests/test_*.py

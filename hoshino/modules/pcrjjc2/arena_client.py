@@ -6,16 +6,10 @@ arena_client.py - PCR API 客户端封装（DAO 层）
 """
 
 from asyncio import Lock
-from json import load
-from os.path import dirname, join
 
 from .jjcdata import charadata
 from .pcrclient import ApiException, pcrclient
-
-_curpath = dirname(__file__)
-
-with open(join(_curpath, "account.json")) as _fp:
-    _acinfo = load(_fp)
+from .pcrclient_types import Profile, UserInfoEx
 
 _client = pcrclient()
 _qlck = Lock()
@@ -25,7 +19,7 @@ _chara_db = charadata()
 validating = False
 
 
-def _distriglish_name(user_info: dict) -> str:
+def _distriglish_name(user_info: UserInfoEx) -> str:
     if user_info["user_name"] != "佑树":
         user_info["user_dname"] = user_info["user_name"]
         return user_info["user_name"]
@@ -40,17 +34,18 @@ def _distriglish_name(user_info: dict) -> str:
     return dname
 
 
-def _improve_user_info(profile: dict) -> dict:
+def _improve_user_info(profile: Profile) -> UserInfoEx:
     """将 profile 响应展平为 user_info，附加公会名、头像角色名、区别名。"""
-    res = profile["user_info"]
+    res: UserInfoEx = profile["user_info"]
     res["clan_name"] = profile["clan_name"]
     res["avatar_unit_id"] = profile["favorite_unit"]["id"]
     res["avatar_unit_name"] = _chara_db.get_chara_name(res["avatar_unit_id"])
+    res["avatar_unit_rank"] = profile["favorite_unit"]["promotion_level"]
     _distriglish_name(res)
     return res
 
 
-async def get_profile(uid: str) -> dict:
+async def get_profile(uid: str) -> UserInfoEx:
     """
     查询用户 profile 并返回展平后的 user_info。
     包含公会名、头像角色名、区别名（user_dname）。
@@ -66,7 +61,7 @@ async def get_profile(uid: str) -> dict:
     return _improve_user_info(profile)
 
 
-async def get_profile_raw(uid: str) -> dict:
+async def get_profile_raw(uid: str) -> Profile:
     """
     查询用户 profile，返回原始响应（不展平），用于详细查询。
     """

@@ -1,9 +1,21 @@
 import datetime
 import json
 import os
-from typing import Tuple
+from typing import (
+    Any,
+    Awaitable,
+    Dict,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import redis
+from typing_extensions import TypeAlias
+
+from .pcrclient_types import UserInfoCache, UserInfoEx
+
+PcrUidLike: TypeAlias = Union[int, str]
 
 
 def time_to_str(timestamp):
@@ -26,9 +38,14 @@ def pcr_today():
     return today.strftime("%Y-%m-%d")
 
 
-def intify(d, k):
+def intify(d: Dict[str, Any], k: str):
     if k in d:
         d[k] = int(d[k])
+
+
+def boolify(d: Dict[str, Any], k: str):
+    if k in d:
+        d[k] = bool(d[k])
 
 
 def pcr_end_of_today():
@@ -44,11 +61,11 @@ class jjcdata:
     def __init__(self):
         self._redis = redis.Redis(host="pcr-redis", port=6379, decode_responses=True)
 
-    def cache_user_rank(self, uid, ranks: Tuple[int, int]):
+    def cache_user_rank(self, uid: PcrUidLike, ranks: Tuple[int, int]):
         key = f"pcrbot:user:{uid}"
         self._redis.hmset(key, {"arena_rank": ranks[0], "grand_arena_rank": ranks[1]})
 
-    def get_user_rank(self, uid):
+    def get_user_rank(self, uid: PcrUidLike):
         key = f"pcrbot:user:{uid}"
         ranks = self._redis.hmget(key, ("arena_rank", "grand_arena_rank"))
         if not ranks[0] and not ranks[1]:
@@ -56,7 +73,7 @@ class jjcdata:
         else:
             return (int(ranks[0]), int(ranks[1]))
 
-    def cache_user_info(self, uid, user_info: dict):
+    def cache_user_info(self, uid: PcrUidLike, user_info: UserInfoEx):
         """
         User Example
         {
@@ -74,15 +91,17 @@ class jjcdata:
         user_info.pop("viewer_id")
         self._redis.hmset(key, user_info)
 
-    def cache_user_name(self, uid, name):
+    def cache_user_name(self, uid: PcrUidLike, name: str):
         info_key = f"pcrbot:user:{uid}"
         return self._redis.hset(info_key, "user_name", name)
 
-    def get_user_name(self, uid):
+    def get_user_name(self, uid: PcrUidLike):
         info_key = f"pcrbot:user:{uid}"
         return self._redis.hget(info_key, "user_name")
 
-    def get_user_info(self, uid):
+    def get_user_info(
+        self, uid: PcrUidLike
+    ) -> Union[Awaitable[UserInfoCache], UserInfoCache]:
         info_key = f"pcrbot:user:{uid}"
         user_info = self._redis.hgetall(info_key)
         if not user_info:
@@ -103,6 +122,8 @@ class jjcdata:
         intify(user_info, "tower_cleared_floor_num")
         intify(user_info, "tower_cleared_ex_quest_count")
         intify(user_info, "friend_num")
+        boolify(user_info, "arena_mining")
+        boolify(user_info, "grand_arena_mining")
 
         jjc_key = f"pcrbot:jjc_challenge:{today}:{uid}"
         jjc_challenge = self._redis.get(jjc_key) or 0
@@ -112,17 +133,31 @@ class jjcdata:
         user_info["grand_arena_challenge"] = pjjc_challenge
         return user_info
 
-    def cache_user_jjc_challenge(self, uid):
+    def cache_user_jjc_challenge(self, uid: PcrUidLike):
         today = pcr_today()
         key = f"pcrbot:jjc_challenge:{today}:{uid}"
         self._redis.incr(key)
         self._redis.expireat(key, pcr_end_of_today())
 
-    def cache_user_pjjc_challenge(self, uid):
+    def cache_user_pjjc_challenge(self, uid: PcrUidLike):
         today = pcr_today()
         key = f"pcrbot:pjjc_challenge:{today}:{uid}"
         self._redis.incr(key)
         self._redis.expireat(key, pcr_end_of_today())
+
+    def cache_user_arena_mining(self, uid: PcrUidLike, mining: Optional[bool]):
+        info_key = f"pcrbot:user:{uid}"
+        if mining is not None:
+            return self._redis.hset(info_key, "arena_mining", mining)
+        else:
+            self._redis.hdel(info_key, "arena_mining")
+
+    def cache_user_grand_arena_mining(self, uid: PcrUidLike, mining: Optional[bool]):
+        info_key = f"pcrbot:user:{uid}"
+        if mining is not None:
+            return self._redis.hset(info_key, "grand_arena_mining", mining)
+        else:
+            self._redis.hdel(info_key, "grand_arena_mining")
 
 
 class charadata:

@@ -1,9 +1,11 @@
 """
 arena_service.py - 竞技场订阅排名检测 Service 层
 
-ArenaService 持有配置、订阅管理器和 Redis DAO，对外提供：
-  - should_check_subscriptions()：根据 config.yaml 时段判断本分钟是否需要检测
-  - check_arena_subscriptions()：按用户→群→uid 遍历，本轮内存缓存去重，聚合通知
+ArenaService 持有配置、订阅管理器、通缉管理器和 Redis DAO，对外提供：
+  - should_check_subscriptions()：根据 config.yaml 时段判断本分钟是否需要检测订阅
+  - check_arena_subscriptions()：调用 rank_monitor.check_subscriptions() 执行订阅监控
+  - should_check_wanted()：根据 config.yaml 时段判断本分钟是否需要检测通缉
+  - check_wanted()：调用 rank_monitor.check_wanted() 执行通缉监控
   - bind / unbind / set_toggle / move_group 等订阅管理操作
   - query_group_ranks()：查询当前群绑定 uid 的实时排名
   - query_detail()：查询单个 uid 的详细信息
@@ -11,20 +13,39 @@ ArenaService 持有配置、订阅管理器和 Redis DAO，对外提供：
 """
 
 import asyncio
-import random
-from collections import defaultdict
-from dataclasses import dataclass, field
+import json
+import os
+import threading
+from dataclasses import dataclass
 from datetime import datetime
-from traceback import format_exc
-from typing import Dict, List, Optional, Tuple
+from os.path import exists
+from typing import List, Optional, Tuple, Union
 
-from .arena_client import ApiException, _improve_user_info, get_profile, get_profile_raw
-from .config_loader import TZ_CST, get_check_config, get_current_period, save_config
+from . import rank_monitor
+from .arena_client import _improve_user_info, get_profile, get_profile_raw
+from .config_loader import TZ_CST, save_config
 from .jjcdata import jjcdata
-from nonebot import get_bot
-from .schema import Config, SubscriptionItem
-from .subscriptions import SubscriptionManager
-from .table_image import Cell, StyledText, render_table_as_cq
+from .schema import (
+    NOTICE_LEVEL_DEFAULT,
+    NOTICE_LEVEL_HIGH_BEFORE_SETTLEMENT,
+    NOTICE_LEVEL_HIGH_TODAY,
+    Bot,
+    Config,
+    Logger,
+    SubscriberArenaGroups,
+    WantedItem,
+)
+from .subscription_manager import SubscriptionManager
+from .table_image import (
+    CELL_FONT_SIZE,  # 读取当前字号常量，保持一致
+    Cell,
+    Header,
+    StyledText,
+    image_to_cq,
+    render_table,
+)
+from .wanted_manager import WantedManager
+from .wanted_summary_formatter import WantedSummaryRow
 
 
 @dataclass
@@ -47,8 +68,8 @@ class SubStatusRow:
     uid: str
     gid: str
     user_name: str  # 昵称，缓存中无则为 "-"
-    arena_str: str  # "N场 M名" 或 "-"（兼容纯文本输出）
-    grand_arena_str: str
+    arena_str: str  # "5场 50名" 或 "-"
+    grand_arena_str: str  # "1场 20名" 或 "-"
     arena_on: bool
     grand_arena_on: bool
     # 原始数值，供富文本渲染着色；未缓存时为 None
@@ -58,36 +79,44 @@ class SubStatusRow:
     grand_arena_group: Optional[int] = None
 
 
-@dataclass
-class CheckSubscriptionContext:
-    """
-    单轮检测上下文，生命周期为一次 check_arena_subscriptions 调用。
-
-    round_cache:  uid -> (last, ranks)
-                  last:  本轮开始前的 Redis 基准，可为 None（首次）
-                  ranks: 本次 API 返回的新排名
-                  首次查询时填入并更新 Redis；命中缓存时直接复用，不再读写 Redis，
-                  确保多个用户订阅同一 uid 时各自都能收到通知。
-    bot:          nonebot bot 实例，在调用前由 check_arena_subscriptions 填充。
-    """
-
-    round_cache: Dict[str, Tuple[Optional[Tuple[int, int]], Tuple[int, int]]] = field(
-        default_factory=dict
-    )
-    bot: object = None
-
-
 class ArenaService:
+    _config_path: Optional[str] = None
+
     def __init__(
         self,
         config: Config,
         cache: jjcdata,
-        logger,
+        bot: Bot,
+        logger: Logger,
+        wanted_manager: Optional[WantedManager] = None,
+        *,
+        config_path: Optional[str] = None,
+        reset_notice_levels: Optional[bool] = True,
     ):
+        self._config_path = config_path
         self._config = config
         self._sub_mgr = SubscriptionManager(items=config.subscription.items)
+        self._wanted_mgr = wanted_manager or WantedManager(config.wanted_list)
         self._cache = cache
+        self._bot = bot
         self._logger = logger
+        self._loop = asyncio.new_event_loop()
+        self._loop_thread = threading.Thread(
+            target=self._loop.run_forever, daemon=True, name="check-worker"
+        )
+        self._loop_thread.start()
+
+        # 启动时重置 notice_level（清理临时提升的级别）
+        if reset_notice_levels:
+            self._reset_notice_levels_on_startup()
+
+    @property
+    def bot(self) -> Bot:
+        return self._bot
+
+    @property
+    def logger(self) -> Logger:
+        return self._logger
 
     @property
     def now(self) -> datetime:
@@ -97,10 +126,61 @@ class ArenaService:
     def subscription_manager(self) -> SubscriptionManager:
         return self._sub_mgr
 
+    @property
+    def wanted_manager(self) -> WantedManager:
+        return self._wanted_mgr
+
     def save_config(self, config_path: Optional[str] = None) -> None:
-        """将当前订阅 items 同步回 Config 并写入 config.yaml。"""
+        """将当前订阅 items 和通缉数据同步回 Config 并写入 config.yaml。"""
         self._config.subscription.items = self._sub_mgr._items
-        save_config(self._config, config_path)
+        self._config.wanted_list.group = self._wanted_mgr._group
+        self._config.wanted_list.personal = self._wanted_mgr._personal
+        save_config(self._config, config_path or self._config_path)
+
+    def migrate(
+        self,
+        binds_path: Optional[str] = None,
+        wanted_path: Optional[str] = None,
+        backup: bool = False,
+    ) -> None:
+        """
+        从旧数据文件迁移订阅和通缉数据到 config.yaml。
+
+        Args:
+            binds_path: 旧订阅数据文件路径（binds.json）
+            wanted_path: 旧通缉数据文件路径（wanted_binds.json）
+            backup: 是否在迁移后重命名旧文件为 .bak
+        """
+
+        migrated = False
+
+        # 迁移订阅数据
+        if binds_path and exists(binds_path) and not self._sub_mgr._items:
+            self._logger.info(
+                f"[pcrjjc2] config.yaml 中无订阅数据，从 {binds_path} 自动迁移..."
+            )
+            with open(binds_path, encoding="utf-8") as fp:
+                old_binds = json.load(fp)
+            self._sub_mgr.migrate_from_old(old_binds.get("arena_bind", {}))
+            migrated = True
+            if backup:
+                os.rename(binds_path, binds_path + ".bak")
+
+        # 迁移通缉数据
+        if wanted_path and exists(wanted_path) and not self._wanted_mgr._group:
+            self._logger.info(
+                f"[pcrjjc2] config.yaml 中无通缉数据，从 {wanted_path} 自动迁移..."
+            )
+            with open(wanted_path, encoding="utf-8") as fp:
+                old_wanted = json.load(fp)
+            self._wanted_mgr.migrate_from_old(old_wanted.get("wanted_bind", {}))
+            migrated = True
+            if backup:
+                os.rename(wanted_path, wanted_path + ".bak")
+
+        # 保存迁移结果
+        if migrated:
+            self.save_config()
 
     # ------------------------------------------------------------------ #
     # 订阅 CRUD                                                            #
@@ -138,14 +218,44 @@ class ArenaService:
     # 查询                                                                 #
     # ------------------------------------------------------------------ #
 
-    async def query_group_ranks(self, qq: str, gid: str) -> List[RankInfo]:
+    async def query_group_ranks(
+        self, qq: str, gid: str, uid_or_idx: Optional[str] = None
+    ) -> List[RankInfo]:
         """
-        查询 qq 用户在 gid 群绑定的所有 uid 的实时排名。
-        返回 RankInfo 列表，顺序与订阅列表一致。
+        查询 qq 用户在 gid 群绑定的 uid 的实时排名。
+        uid_or_idx 为 None 时查询所有绑定。
+        uid_or_idx 为 13 位数字时视为 uid，查询单个。
+        uid_or_idx 为其他数字时视为索引（1-based），查询单个。
+        返回 RankInfo 列表。
         没有绑定时返回空列表。
         失败时抛 ApiException。
         """
-        subs = self._sub_mgr.get_list_by_gid(qq, gid)
+        if uid_or_idx is None:
+            # 查询所有绑定
+            subs = self._sub_mgr.get_list_by_gid(qq, gid)
+        elif len(uid_or_idx) == 13 and uid_or_idx.isdigit():
+            # 13位数字，视为 uid
+            subs = self._sub_mgr.get_list_by_gid(qq, gid)
+            subs = [s for s in subs if s.id == uid_or_idx]
+        else:
+            # 尝试解析为索引
+            try:
+                idx = int(uid_or_idx)
+                all_subs = self._sub_mgr.get_list(qq)
+                if 1 <= idx <= len(all_subs):
+                    target_sub = all_subs[idx - 1]
+                    # 只返回该订阅（如果它在当前群）
+                    if target_sub.gid == gid:
+                        subs = [target_sub]
+                    else:
+                        subs = []
+                else:
+                    raise ValueError(f"索引 {idx} 超出范围（1-{len(all_subs)}）")
+            except ValueError as e:
+                if "索引" in str(e):
+                    raise
+                raise ValueError(f"无效的 uid 或索引：{uid_or_idx}")
+
         result: List[RankInfo] = []
         for sub in subs:
             res = await get_profile(sub.id)
@@ -162,19 +272,41 @@ class ArenaService:
             )
         return result
 
-    async def query_detail(self, qq: str, gid: str, uid: Optional[str] = None) -> dict:
+    async def query_detail(
+        self, qq: str, gid: str, uid_or_idx: Optional[str] = None
+    ) -> dict:
         """
         查询单个 uid 的详细信息。
-        uid 为 None 时取该用户在当前群的第一个订阅。
+        uid_or_idx 为 None 时取该用户在当前群的第一个订阅。
+        uid_or_idx 为 13 位数字时视为 uid。
+        uid_or_idx 为其他数字时视为索引（1-based）。
         返回展平后的 user_info dict（含 arena_time/grand_arena_time/clan_name）。
         uid 为空且当前群无绑定时抛 ValueError。
         失败时抛 ApiException。
         """
-        if uid is None:
+        uid = None
+        if uid_or_idx is None:
             subs = self._sub_mgr.get_list_by_gid(qq, gid)
             if not subs:
                 raise ValueError("当前群未绑定竞技场")
             uid = subs[0].id
+        elif len(uid_or_idx) == 13 and uid_or_idx.isdigit():
+            # 13位数字，视为 uid
+            uid = uid_or_idx
+        else:
+            # 尝试解析为索引
+            try:
+                idx = int(uid_or_idx)
+                all_subs = self._sub_mgr.get_list(qq)
+                if 1 <= idx <= len(all_subs):
+                    uid = all_subs[idx - 1].id
+                else:
+                    raise ValueError(f"索引 {idx} 超出范围（1-{len(all_subs)}）")
+            except ValueError as e:
+                if "索引" in str(e):
+                    raise
+                raise ValueError(f"无效的 uid 或索引：{uid_or_idx}")
+
         raw = await get_profile_raw(uid)
         user_info = _improve_user_info(raw)
         # _improve_user_info 展平 profile["user_info"]，arena_time/grand_arena_time/clan_name 已在其中
@@ -218,128 +350,245 @@ class ArenaService:
             )
         return rows
 
+    def get_wanted_summary_rows(
+        self, sender_qq: str, sender_gid: str, filter_type: Optional[str] = None
+    ) -> Tuple[List[WantedSummaryRow], List[WantedSummaryRow]]:
+        """
+        返回通缉犯概要的数据行，供"通缉犯概要"渲染表格。
+
+        :param sender_qq: 命令发送者的 QQ 号
+        :param sender_gid: 命令发送群号
+        :param filter_type: 筛选类型 - None(全部), "group"(仅群通缉), "personal"(仅个人通缉)
+        :return: (群通缉行列表, 个人通缉行列表)
+        """
+        # 获取命令发送者的场号集合
+        sender_groups = self._sub_mgr.get_subscriber_arena_groups(
+            sender_qq, self._cache
+        )
+
+        group_rows: List[WantedSummaryRow] = []
+        personal_rows: List[WantedSummaryRow] = []
+
+        # 群通缉
+        if filter_type is None or filter_type == "group":
+            group_items = self._wanted_mgr.list_group(sender_gid)
+
+            for i, item in enumerate(group_items):
+                row = self._build_wanted_summary_row(
+                    index=i + 1,
+                    item=item,
+                    sender_groups=sender_groups,
+                )
+                if row:
+                    group_rows.append(row)
+
+        # 个人通缉
+        if filter_type is None or filter_type == "personal":
+            personal_items = self._wanted_mgr.list_personal(sender_qq)
+            for i, item in enumerate(personal_items):
+                row = self._build_wanted_summary_row(
+                    index=i + 1,
+                    item=item,
+                    sender_groups=sender_groups,
+                )
+                if row:
+                    personal_rows.append(row)
+
+        return group_rows, personal_rows
+
+    def _build_wanted_summary_row(
+        self,
+        index: int,
+        item: WantedItem,  # WantedItem
+        sender_groups: SubscriberArenaGroups,  # SubscriberArenaGroups
+    ) -> Optional[WantedSummaryRow]:
+        """构建单个通缉犯概要行。"""
+        uid = item.id
+        info = self._cache.get_user_info(uid) or {}
+
+        # 基本信息
+        user_name = info.get("user_name", uid)
+        avatar_unit_name = info.get("avatar_unit_name")
+        clan_name = info.get("clan_name")
+
+        # 竞技场信息
+        arena_group = info.get("arena_group", 0)
+        arena_rank = info.get("arena_rank", 0)
+
+        arena_challenges = info.get("arena_challenge", 0)
+        arena_mining = info.get("arena_mining", None)
+
+        grand_arena_group = info.get("grand_arena_group", 0)
+        grand_arena_rank = info.get("grand_arena_rank", 0)
+        grand_arena_challenges = info.get("grand_arena_challenge", 0)
+        grand_arena_mining = info.get("grand_arena_mining", None)
+
+        # 上线时间
+        last_login_time = info.get("last_login_time", 0)
+
+        # 是否同场
+        same_arena_group = (
+            arena_group in sender_groups.arena_groups if arena_group else False
+        )
+        same_grand_arena_group = (
+            grand_arena_group in sender_groups.grand_arena_groups
+            if grand_arena_group
+            else False
+        )
+
+        arena_str = (
+            f"{arena_group}场 {arena_rank}名" if arena_group and arena_rank else "-"
+        )
+        grand_arena_str = (
+            f"{grand_arena_group}场 {grand_arena_rank}名"
+            if grand_arena_group and grand_arena_rank
+            else "-"
+        )
+
+        return WantedSummaryRow(
+            index=index,
+            uid=uid,
+            user_name=user_name,
+            avatar_unit_name=avatar_unit_name,
+            clan_name=clan_name,
+            arena_group=arena_group,
+            arena_rank=arena_rank,
+            arena_challenges=arena_challenges,
+            arena_on=item.arena_on,
+            arena_mining=arena_mining,
+            grand_arena_group=grand_arena_group,
+            grand_arena_rank=grand_arena_rank,
+            grand_arena_challenges=grand_arena_challenges,
+            grand_arena_on=item.grand_arena_on,
+            grand_arena_mining=grand_arena_mining,
+            last_login_time=last_login_time,
+            note=item.note,
+            notice_level=item.notice_level,
+            same_arena_group=same_arena_group,
+            same_grand_arena_group=same_grand_arena_group,
+            arena_str=arena_str,
+            grand_arena_str=grand_arena_str,
+        )
+
     # ------------------------------------------------------------------ #
     # 调度                                                                 #
     # ------------------------------------------------------------------ #
 
-    async def should_check_subscriptions(self, now: Optional[datetime] = None) -> bool:
+    async def on_schedule(self, *, sync: bool = False, now: Optional[datetime] = None):
         """
-        根据 config 的 periods + subscription.check_config 判断本分钟是否检测。
+        执行定时任务
 
-        settlement（interval=0）：仅 15:00 触发一次，无延迟。
-        其余时段：按 interval 取余，delay 范围内随机延迟后返回 True。
+        :param sync: True 表示在当前线程执行并等待结果；False 会在专用线程执行
         """
-        now = now or self.now
-        period = get_current_period(self._config.periods, now=now)
-        period_name = period.name if period else "default"
-        cc = get_check_config(self._config.subscription.check_config, period_name)
+        if sync:
+            await self.check(now)
+        else:
+            asyncio.run_coroutine_threadsafe(
+                self.check(now),
+                self._loop,
+            )
 
-        if cc.interval == 0:
-            return now.hour == 15 and now.minute == 0
+    async def check(self, now: Optional[datetime] = None, delay: Optional[int] = None):
+        """
+        检测订阅和通缉
+        """
 
-        check = (now.minute % cc.interval) == 0
-        if check and cc.delay > 0:
-            await asyncio.sleep(random.randint(0, cc.delay))
-        return check
+        ctx = rank_monitor.CheckContext(
+            bot=self._bot,
+            logger=self._logger,
+            cache=self._cache,
+            config=self._config,
+            now=now,
+        )
+        await asyncio.gather(
+            self.check_arena_subscriptions(ctx, now=now, delay=delay),
+            self.check_wanted(ctx, now=now, delay=delay),
+        )
 
-    async def check_arena_subscriptions(self) -> None:
+    async def check_arena_subscriptions(
+        self,
+        ctx: rank_monitor.CheckContext,
+        *,
+        now: Optional[datetime] = None,
+        delay: Optional[int] = None,
+    ) -> None:
         """
         遍历所有订阅，按 用户 → 群 → uid 的顺序逐步检测和通知。
         每个群聚合成一条 @ 消息，同一 uid 在本轮只查询一次 API。
+        委托给 rank_monitor.check_subscriptions() 执行。
         """
-        ctx = CheckSubscriptionContext(bot=get_bot())
+        await rank_monitor.check_subscriptions(ctx, self._sub_mgr, delay=delay)
 
-        # 按 qq 分组：qq -> {gid -> [SubscriptionItem]}
-        by_user: Dict[str, Dict[str, List[SubscriptionItem]]] = defaultdict(
-            lambda: defaultdict(list)
+    async def check_wanted(
+        self,
+        ctx: rank_monitor.CheckContext,
+        *,
+        now: Optional[datetime] = None,
+        delay: Optional[int] = None,
+    ) -> None:
+        """
+        遍历所有通缉条目，先收集所有要检测的 uid，批量检测，然后根据结果分发消息。
+        委托给 rank_monitor.check_wanted() 执行。
+        检测后处理 notice_level 降级（settlement/次日5点）。
+        """
+        await rank_monitor.check_wanted(ctx, self._wanted_mgr, delay=delay)
+
+        # notice_level 降级逻辑
+
+        now = ctx.now
+        need_save = False
+
+        # 15:00 settlement：level=2/3 → level=1
+        if now.hour == 15 and now.minute == 0:
+            need_save = self._reset_notice_level(
+                NOTICE_LEVEL_HIGH_BEFORE_SETTLEMENT, NOTICE_LEVEL_DEFAULT
+            )
+
+        # 次日 05:00：level=4 → level=1
+        if now.hour == 5 and now.minute == 0:
+            need_save = (
+                self._reset_notice_level(NOTICE_LEVEL_HIGH_TODAY, NOTICE_LEVEL_DEFAULT)
+                or need_save
+            )
+
+        if need_save:
+            self.save_config()
+
+    def _reset_notice_level(self, from_level: int, to_level: int) -> bool:
+        """
+        将所有 notice_level == from_level 的通缉项重置为 to_level。
+        返回是否有修改。
+        """
+        modified = False
+
+        # 群通缉
+        for gid, items in self._wanted_mgr._group.items():
+            for item in items:
+                if item.notice_level == from_level:
+                    item.notice_level = to_level
+                    modified = True
+
+        # 个人通缉
+        for qq, items in self._wanted_mgr._personal.items():
+            for item in items:
+                if item.notice_level == from_level:
+                    item.notice_level = to_level
+                    modified = True
+
+        return modified
+
+    def _reset_notice_levels_on_startup(self) -> None:
+        """
+        启动时重置临时提升的 notice_level。
+        仅重置 level=3 (HIGH_BEFORE_SETTLEMENT) → level=1 (DEFAULT)。
+        """
+
+        need_save = self._reset_notice_level(
+            NOTICE_LEVEL_HIGH_BEFORE_SETTLEMENT, NOTICE_LEVEL_DEFAULT
         )
-        for qq, item in self._sub_mgr.get_all_items():
-            by_user[qq][item.gid].append(item)
 
-        for qq, groups in by_user.items():
-            await self._check_user_subscriptions(qq, groups, ctx)
-
-    async def _check_user_subscriptions(
-        self,
-        qq: str,
-        groups: Dict[str, List[SubscriptionItem]],
-        ctx: CheckSubscriptionContext,
-    ) -> None:
-        """
-        处理单个用户的所有订阅，按群分组后逐群聚合通知。
-        """
-        for gid, items in groups.items():
-            await self._check_user_subscriptions_in_group(qq, gid, items, ctx)
-
-    async def _check_user_subscriptions_in_group(
-        self,
-        qq: str,
-        gid: str,
-        items: List[SubscriptionItem],
-        ctx: CheckSubscriptionContext,
-    ) -> None:
-        """
-        处理单个用户在单个群的订阅列表。
-        查询每个 uid（命中本轮缓存则跳过 API），比对基准，聚合变动行后发一条 @ 消息。
-        """
-        lines: List[str] = []
-
-        for sub in items:
-            uid = sub.id
-
-            # 命中本轮缓存：直接取出 (last, ranks)，跳过 API 和 Redis 读写
-            if uid in ctx.round_cache:
-                last, ranks = ctx.round_cache[uid]
-            else:
-                try:
-                    self._logger.info(f"[arena] querying uid={uid} for qq={qq}")
-                    res = await get_profile(uid)
-                    ranks = (res["arena_rank"], res["grand_arena_rank"])
-                    # 记录昵称，方便提醒时附带
-                    self._cache.cache_user_name(uid, res["user_name"])
-                except ApiException as e:
-                    self._logger.info(f"[arena] uid={uid} 查询出错\n{format_exc()}")
-                    if e.code == 6:
-                        self._logger.info(f"[arena] uid={uid} 无效，已跳过")
-                    continue
-                except Exception:
-                    self._logger.info(f"[arena] uid={uid} 查询出错\n{format_exc()}")
-                    continue
-
-                # 读基准、更新 Redis、存入本轮缓存
-                last = self._cache.get_user_rank(uid)
-                self._cache.cache_user_rank(uid, ranks)
-                ctx.round_cache[uid] = (last, ranks)
-
-            if not last:
-                continue  # 首次记录，无基准
-
-            jjc_line: Optional[str] = None
-            pjjc_line: Optional[str] = None
-            if ranks[0] > last[0] and sub.arena_on:
-                jjc_line = f"jjc：{last[0]}->{ranks[0]} ▼{ranks[0] - last[0]}"
-            if ranks[1] > last[1] and sub.grand_arena_on:
-                pjjc_line = f"pjjc：{last[1]}->{ranks[1]} ▼{ranks[1] - last[1]}"
-
-            if not jjc_line and not pjjc_line:
-                continue
-
-            # 昵称
-            user_name = self._cache.get_user_name(uid)
-            lines.append(user_name)
-            if jjc_line:
-                lines.append(jjc_line)
-            if pjjc_line:
-                lines.append(pjjc_line)
-
-        if lines:
-            message = f"[CQ:at,qq={qq}]\n" + "\n".join(lines)
-            try:
-                await ctx.bot.send_group_msg(group_id=int(gid), message=message)
-            except Exception:
-                self._logger.info(
-                    f"[arena] 发送通知失败 gid={gid} qq={qq}\n{format_exc()}"
-                )
+        if need_save:
+            self.save_config()
 
 
 # ── 排名着色规则 ──────────────────────────────────────────────────────
@@ -396,14 +645,20 @@ def _rank_cell(group: Optional[int], rank: Optional[int], font_size: int) -> Cel
     return Cell(content=segs, align="right", valign="bottom")
 
 
-def render_subscription_status_cq(rows_data: List[SubStatusRow]) -> str:
+def render_subscription_status(rows_data: List[SubStatusRow]):
     """
-    将订阅状态行列表渲染为富文本图片表格，返回 CQ 码字符串。
-    由 service.py 的 send_arena_sub_status handler 调用。
+    将订阅状态行列表渲染为富文本图片表格。
     """
-    from .table_image import _FONT_SIZE  # 读取当前字号常量，保持一致
 
-    headers = ["#", "昵称", "UID", "通知群", "jjc", "pjjc", "通知"]
+    headers = [
+        Header("#", align="center"),
+        Header("昵称", min_width="21em"),
+        Header("UID", min_width="14em"),
+        Header("通知群", align="center", min_width="12em"),
+        Header("战斗竞技场", align="center"),
+        Header("公主竞技场", align="center"),
+        Header("通知", align="center"),
+    ]
     rows = []
     for r in rows_data:
         # 通知开关列
@@ -427,14 +682,23 @@ def render_subscription_status_cq(rows_data: List[SubStatusRow]) -> str:
                 name,
                 r.uid,
                 r.gid,
-                _rank_cell(r.arena_group, r.arena_rank, _FONT_SIZE),
-                _rank_cell(r.grand_arena_group, r.grand_arena_rank, _FONT_SIZE),
+                _rank_cell(r.arena_group, r.arena_rank, CELL_FONT_SIZE),
+                _rank_cell(r.grand_arena_group, r.grand_arena_rank, CELL_FONT_SIZE),
                 Cell(content=notify, align="center"),
             ]
         )
 
-    return render_table_as_cq(
+    return render_table(
         headers=headers,
         rows=rows,
         title="竞技场订阅状态",
     )
+
+
+def render_subscription_status_cq(rows_data: List[SubStatusRow]) -> str:
+    """
+    将订阅状态行列表渲染为富文本图片表格，返回 CQ 码字符串。
+    由 service.py 的 send_arena_sub_status handler 调用。
+    """
+
+    return image_to_cq(render_subscription_status(rows_data))

@@ -1,17 +1,15 @@
 """
-subscriptions.py - 订阅数据内存管理
+subscription_manager.py - 订阅数据内存管理
 
 SubscriptionManager 持有内存中的订阅 items dict，提供 CRUD 操作。
 加载和保存由 config_loader 负责，不在此模块进行文件 I/O。
 """
 
-from __future__ import annotations
-
-from typing import Dict, List, Optional, TypedDict
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 from typing_extensions import TypeAlias
 
-from .schema import SubscriptionItem
+from .schema import SubscriberArenaGroups, SubscriptionItem
 
 _MAX_SUBS = 8
 
@@ -41,7 +39,7 @@ class SubscriptionManager:
         """返回 qq 用户在指定群的订阅列表。"""
         return [s for s in self.get_list(qq) if s.gid == str(gid)]
 
-    def get_all_items(self) -> List[tuple]:
+    def get_all_items(self) -> List[Tuple[str, SubscriptionItem]]:
         """
         返回所有订阅的 (qq: str, item: SubscriptionItem) 列表，供调度任务遍历。
         """
@@ -74,7 +72,9 @@ class SubscriptionManager:
             return "full"
 
         existing.append(
-            SubscriptionItem(id=uid, gid=gid, arena_on=arena_on, grand_arena_on=grand_arena_on)
+            SubscriptionItem(
+                id=uid, gid=gid, arena_on=arena_on, grand_arena_on=grand_arena_on
+            )
         )
         self._items[qq] = existing
         return "ok"
@@ -147,7 +147,7 @@ class SubscriptionManager:
     # 迁移                                                                 #
     # ------------------------------------------------------------------ #
 
-    def migrate_from_old(self, old_binds: LegacyArenaBind) -> None:
+    def migrate_from_old(self, old_binds: "LegacyArenaBind") -> None:
         """
         从旧 binds.json 的 arena_bind 字典迁移。
         old_binds 格式: { qq: {id, uid, gid, arena_on, grand_arena_on} }
@@ -166,6 +166,66 @@ class SubscriptionManager:
                 )
             ]
 
+    def migrate_from_old_watch(self, old_watch: "LegacyWatchBind") -> None:
+        """
+        从旧 wanted_binds.json 的 watch_bind 字典迁移为 QQ=0 订阅。
+        old_watch 格式: { gid: [uid, ...] }
+
+        每个 uid 创建一个 QQ=0 的订阅，通知群为 gid。
+        允许超出 8 个上限（旧数据迁移特例）。
+        不覆盖已有 QQ=0 的订阅数据。
+        """
+        qq_zero = "0"
+        existing = self.get_list(qq_zero)
+        existing_uids = {s.id for s in existing}
+
+        for gid, uid_list in old_watch.items():
+            gid = str(gid)
+            for uid in uid_list:
+                uid = str(uid)
+                if uid in existing_uids:
+                    continue  # 已存在，跳过
+                existing.append(
+                    SubscriptionItem(
+                        id=uid,
+                        gid=gid,
+                        arena_on=True,
+                        grand_arena_on=True,
+                    )
+                )
+                existing_uids.add(uid)
+
+        if existing:
+            self._items[qq_zero] = existing
+
+    def get_subscriber_arena_groups(self, qq: str, cache) -> "SubscriberArenaGroups":  # type: ignore
+        """
+        获取订阅者的竞技场场号集合（用于判断同场）。
+
+        :param qq: 订阅者 QQ 号
+        :param cache: jjcdata 实例，用于读取缓存的场号信息
+        :return: SubscriberArenaGroups 包含 jjc 和 pjjc 场号集合
+        """
+
+        subs = self.get_list(qq)
+        arena_groups = set()
+        grand_arena_groups = set()
+
+        for sub in subs:
+            info = cache.get_user_info(sub.id)
+            if info:
+                arena_group = info.get("arena_group")
+                if arena_group:
+                    arena_groups.add(arena_group)
+                grand_arena_group = info.get("grand_arena_group")
+                if grand_arena_group:
+                    grand_arena_groups.add(grand_arena_group)
+
+        return SubscriberArenaGroups(
+            arena_groups=arena_groups,
+            grand_arena_groups=grand_arena_groups,
+        )
+
 
 class LegacyArenaBindItem(TypedDict):
     id: int  # game id
@@ -176,6 +236,7 @@ class LegacyArenaBindItem(TypedDict):
 
 
 LegacyArenaBind: TypeAlias = Dict[str, LegacyArenaBindItem]
+LegacyWatchBind: TypeAlias = Dict[str, List[str]]  # gid -> [uid, ...]
 
 
 class LegacyBindConfig(TypedDict):

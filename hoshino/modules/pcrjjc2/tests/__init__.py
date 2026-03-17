@@ -9,8 +9,6 @@ import os
 import sys
 import types
 
-from .flags import USE_NEW_LOGIC
-
 
 def _disable_module(name: str):
     """
@@ -28,10 +26,17 @@ def _disable_module(name: str):
 
 if not bool(os.environ.get("TEST")):
     # disable TEST modules unless we start tests
-    _disable_module("tests")
+    # 获取当前模块所在的目录
+    current_dir = os.path.dirname(os.path.abspath(__file__))
 
-if USE_NEW_LOGIC:
-    _disable_module("legacy")
-    _disable_module("legacy_utils")
-else:
-    _disable_module("service")
+    # 遍历当前目录下的所有 .py 文件
+    for filename in os.listdir(current_dir):
+        # 只处理 .py 文件
+        if not filename.endswith(".py"):
+            continue
+        # 排除 __init__.py
+        if filename == "__init__.py":
+            continue
+        module_name = os.path.splitext(filename)[0]
+
+        _disable_module(module_name)

@@ -1,215 +1,360 @@
 """
-wanted_manager.py - 通缉 v2 数据管理（新逻辑）
+wanted_manager.py - 通缉数据内存管理
 
-数据格式 wanted_v2.json:
-{
-    "group": {
-        "GID": [
-            {"uid": "1012345678901", "note": "备注", "watch_at": 3, "notice_level": 1}
-        ]
-    },
-    "personal": {
-        "QQ": {
-            "group": "GID",
-            "items": [
-                {"uid": "1012345678901", "note": "备注", "watch_at": 3, "notice_level": 1}
-            ]
-        }
-    }
-}
+WantedManager 持有 WantedListConfig 中的 group/personal 两张表，
+提供 CRUD 操作。加载和保存由 config_loader + ArenaService.save_config 负责，
+本模块不做任何文件 I/O。
 """
 
-from __future__ import annotations
-
-import json
-from dataclasses import asdict, dataclass
-from os.path import dirname, exists, join
-from typing import Dict, List, Optional, TypedDict
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 from typing_extensions import TypeAlias
 
-_WANTED_V2_PATH = join(dirname(__file__), "wanted_v2.json")
+from .schema import (
+    NOTICE_LEVEL_HIGH,
+    AddWatchSubResult,
+    WantedItem,
+    WantedListConfig,
+    is_attention_level,
+    is_high_notice_level,
+)
+
+_MAX_GROUP = 30
 _MAX_PERSONAL = 8
 
 
 @dataclass
-class Wanted:
-    uid: str
-    note: str = ""
-    watch_at: int = 3  # 监控阈值（排名变动超过此值才通知）
-    notice_level: int = 1  # 1=通缉（攻击时通知）, 2=关注（仅上线通知）
+class Watcher:
+    """
+    通缉者(群或个人)
+    """
 
-    def to_dict(self) -> dict:
-        return asdict(self)
+    id: str  # 通缉人的 QQ，群通缉者为空
+    gid: str  # 通知群
+    level: int  # 通缉级别
+    arena_on: bool
+    grand_arena_on: bool
 
-    @staticmethod
-    def from_dict(d: dict) -> "Wanted":
-        return Wanted(
-            uid=str(d["uid"]),
-            note=str(d.get("note", "")),
-            watch_at=int(d.get("watch_at", 3)),
-            notice_level=int(d.get("notice_level", 1)),
-        )
+    def should_notice_arena(self, hour: int):
+        """
+        判断在给定的小时是否应该通告jjc排名变化
+        """
+        return self.arena_on or (hour == 14 or self.is_attention_level)
+
+    def should_notice_grand_arena(self, hour: int):
+        """
+        判断在给定的小时是否应该通告pjjc排名变化
+        """
+        return self.grand_arena_on or (hour == 14 or self.is_attention_level)
+
+    @property
+    def is_attention_level(self):
+        """
+        判断一个通缉者是否要求关注。关注意味着14:00~14:59期间强制通报双场排名变化。
+        """
+        return is_attention_level(self.level)
+
+    @property
+    def is_high_level(self):
+        """
+        判断一个通缉者是否要求高频通知。高频意味着1分钟检测和通报一次。
+        """
+        return is_high_notice_level(self.level)
+
+    @property
+    def _sort_level(self):
+        return NOTICE_LEVEL_HIGH if self.is_high_level else self.level
+
+
+def sort_watchers(watchers: List[Watcher]) -> List[Watcher]:
+    """
+    按群号、通缉者qq 号和通知级别排序
+    """
+    return sorted(watchers, key=lambda w: (w.gid, w.id, -w._sort_level))
 
 
 @dataclass
-class PersonalWanted:
-    group: str  # 通知目标群
-    items: List[Wanted]
+class WantedDetail:
+    """
+    被通缉人的通缉人详细状况
+    """
 
-    def to_dict(self) -> dict:
-        return {
-            "group": self.group,
-            "items": [w.to_dict() for w in self.items],
-        }
+    uid: str  # 被通缉人的 UID
+    watchers: List[Watcher]  # 通缉此人的所有群和个人
 
-    @staticmethod
-    def from_dict(d: dict) -> "PersonalWanted":
-        return PersonalWanted(
-            group=str(d["group"]),
-            items=[Wanted.from_dict(x) for x in d.get("items", [])],
-        )
+    @property
+    def high_watchers(self) -> List[Watcher]:
+        """
+        通缉犯被要求高频通知的群和个人
+        """
+        return list(filter(lambda w: is_high_notice_level(w.level), self.watchers))
 
 
 class WantedManager:
-    def __init__(self):
-        self._data: dict = {"group": {}, "personal": {}}
-        self._load()
+    """
+    通缉数据的内存 CRUD 管理器。
+    group   格式：{ gid: [WantedItem, ...] }
+    personal格式：{ qq:  [WantedItem, ...] }  每条 item.gid 独立
+    不持有文件路径，不负责 I/O。
+    """
 
-    def _load(self):
-        if exists(_WANTED_V2_PATH):
-            with open(_WANTED_V2_PATH, encoding="utf-8") as f:
-                self._data = json.load(f)
-        if "group" not in self._data:
-            self._data["group"] = {}
-        if "personal" not in self._data:
-            self._data["personal"] = {}
-
-    def save(self):
-        with open(_WANTED_V2_PATH, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, ensure_ascii=False, indent=4)
+    def __init__(self, config: WantedListConfig):
+        self._check_config = config.check_config
+        self._group: Dict[str, List[WantedItem]] = config.group
+        self._personal: Dict[str, List[WantedItem]] = config.personal
 
     # ------------------------------------------------------------------ #
     # 群通缉                                                               #
     # ------------------------------------------------------------------ #
 
-    def list_group(self, gid: str) -> List[Wanted]:
-        raw = self._data["group"].get(str(gid), [])
-        return [Wanted.from_dict(x) for x in raw]
+    def list_group(self, gid: str) -> List[WantedItem]:
+        """返回群 gid 的通缉列表（可能为空列表）。"""
+        return list(self._group.get(str(gid), []))
 
-    def add_group(self, gid: str, wanted: Wanted) -> bool:
-        """添加群通缉。若已存在则返回 False，否则返回 True。"""
+    def add_group(self, gid: str, item: WantedItem) -> AddWatchSubResult:
+        """
+        添加群通缉。
+        返回值：'ok' / 'dup' / 'full'
+        """
         gid = str(gid)
         existing = self.list_group(gid)
-        if any(w.uid == wanted.uid for w in existing):
-            return False
-        existing.append(wanted)
-        self._data["group"][gid] = [w.to_dict() for w in existing]
-        self.save()
-        return True
+        if any(w.id == item.id for w in existing):
+            return "dup"
+        if len(existing) >= _MAX_GROUP:
+            return "full"
+        item.gid = gid
+        existing.append(item)
+        self._group[gid] = existing
+        return "ok"
 
     def remove_group(self, gid: str, uid: str) -> bool:
-        """删除群通缉。若不存在则返回 False。"""
+        """删除群通缉。若不存在返回 False。"""
         gid = str(gid)
         uid = str(uid)
         existing = self.list_group(gid)
-        new_list = [w for w in existing if w.uid != uid]
+        new_list = [w for w in existing if w.id != uid]
         if len(new_list) == len(existing):
             return False
         if new_list:
-            self._data["group"][gid] = [w.to_dict() for w in new_list]
+            self._group[gid] = new_list
         else:
-            self._data["group"].pop(gid, None)
-        self.save()
+            self._group.pop(gid, None)
         return True
+
+    def set_group_notice_level(self, gid: str, uid: str, level: int) -> bool:
+        """设置群通缉条目的 notice_level。返回 False 表示未找到。"""
+        for item in self._group.get(str(gid), []):
+            if item.id == str(uid):
+                item.notice_level = level
+                return True
+        return False
+
+    def set_group_watch_toggle(
+        self,
+        gid: str,
+        uid: str,
+        arena_on: Optional[bool] = None,
+        grand_arena_on: Optional[bool] = None,
+    ) -> bool:
+        """切换群通缉条目的 jjc/pjjc 通知开关。返回 False 表示未找到。"""
+        for item in self._group.get(str(gid), []):
+            if item.id == str(uid):
+                if arena_on is not None:
+                    item.arena_on = arena_on
+                if grand_arena_on is not None:
+                    item.grand_arena_on = grand_arena_on
+                return True
+        return False
+
+    def set_group_note(self, gid: str, uid: str, note: str) -> bool:
+        """设置群通缉条目的备注。返回 False 表示未找到。"""
+        for item in self._group.get(str(gid), []):
+            if item.id == str(uid):
+                item.note = note
+                return True
+        return False
+
+    def get_group_by_uid(self, gid: str, uid: str) -> Optional[WantedItem]:
+        """按 uid 获取群通缉项。返回 None 表示未找到。"""
+        for item in self._group.get(str(gid), []):
+            if item.id == str(uid):
+                return item
+        return None
+
+    def get_group_by_index(self, gid: str, idx: int) -> Optional[WantedItem]:
+        """按索引（1-based）获取群通缉项。返回 None 表示索引越界。"""
+        items = self.list_group(gid)
+        if 1 <= idx <= len(items):
+            return items[idx - 1]
+        return None
 
     # ------------------------------------------------------------------ #
     # 个人通缉                                                             #
     # ------------------------------------------------------------------ #
 
-    def list_personal(self, qq: str) -> Optional[PersonalWanted]:
-        raw = self._data["personal"].get(str(qq))
-        if raw is None:
-            return None
-        return PersonalWanted.from_dict(raw)
+    def list_personal(self, qq: str) -> List[WantedItem]:
+        """返回用户 qq 的个人通缉列表（可能为空列表）。"""
+        return list(self._personal.get(str(qq), []))
 
-    def add_personal(self, qq: str, gid: str, wanted: Wanted) -> str:
+    def add_personal(self, qq: str, item: WantedItem) -> str:
         """
-        添加个人通缉（绑定到 gid 群）。
-        返回值:
-            'ok'   - 成功
-            'dup'  - 已存在
-            'full' - 已达上限
+        添加个人通缉（item.gid 已由调用方填入目标群）。
+        返回值：'ok' / 'dup' / 'full'
         """
         qq = str(qq)
-        gid = str(gid)
-        pw = self.list_personal(qq)
-        if pw is None:
-            pw = PersonalWanted(group=gid, items=[])
-
-        if any(w.uid == wanted.uid for w in pw.items):
+        existing = self.list_personal(qq)
+        if any(w.id == item.id for w in existing):
             return "dup"
-        if len(pw.items) >= _MAX_PERSONAL:
+        if len(existing) >= _MAX_PERSONAL:
             return "full"
-
-        pw.items.append(wanted)
-        self._data["personal"][qq] = pw.to_dict()
-        self.save()
+        item.by = qq
+        existing.append(item)
+        self._personal[qq] = existing
         return "ok"
 
     def remove_personal(self, qq: str, uid: str) -> bool:
-        """删除个人通缉。若不存在则返回 False。"""
+        """删除个人通缉。若不存在返回 False。"""
         qq = str(qq)
         uid = str(uid)
-        pw = self.list_personal(qq)
-        if pw is None:
+        existing = self.list_personal(qq)
+        new_list = [w for w in existing if w.id != uid]
+        if len(new_list) == len(existing):
             return False
-        new_items = [w for w in pw.items if w.uid != uid]
-        if len(new_items) == len(pw.items):
-            return False
-        if new_items:
-            pw.items = new_items
-            self._data["personal"][qq] = pw.to_dict()
+        if new_list:
+            self._personal[qq] = new_list
         else:
-            self._data["personal"].pop(qq, None)
-        self.save()
+            self._personal.pop(qq, None)
         return True
+
+    def set_personal_notice_level(self, qq: str, uid: str, level: int) -> bool:
+        """设置个人通缉条目的 notice_level。返回 False 表示未找到。"""
+        for item in self._personal.get(str(qq), []):
+            if item.id == str(uid):
+                item.notice_level = level
+                return True
+        return False
+
+    def set_personal_watch_toggle(
+        self,
+        qq: str,
+        uid: str,
+        arena_on: Optional[bool] = None,
+        grand_arena_on: Optional[bool] = None,
+    ) -> bool:
+        """切换个人通缉条目的 jjc/pjjc 通知开关。返回 False 表示未找到。"""
+        for item in self._personal.get(str(qq), []):
+            if item.id == str(uid):
+                if arena_on is not None:
+                    item.arena_on = arena_on
+                if grand_arena_on is not None:
+                    item.grand_arena_on = grand_arena_on
+                return True
+        return False
+
+    def set_personal_note(self, qq: str, uid: str, note: str) -> bool:
+        """设置个人通缉条目的备注。返回 False 表示未找到。"""
+        for item in self._personal.get(str(qq), []):
+            if item.id == str(uid):
+                item.note = note
+                return True
+        return False
+
+    def get_personal_by_uid(self, qq: str, uid: str) -> Optional[WantedItem]:
+        """按 uid 获取个人通缉项。返回 None 表示未找到。"""
+        for item in self._personal.get(str(qq), []):
+            if item.id == str(uid):
+                return item
+        return None
+
+    def get_personal_by_index(self, qq: str, idx: int) -> Optional[WantedItem]:
+        """按索引（1-based）获取个人通缉项。返回 None 表示索引越界。"""
+        items = self.list_personal(qq)
+        if 1 <= idx <= len(items):
+            return items[idx - 1]
+        return None
+
+    # ------------------------------------------------------------------ #
+    # 全量遍历（供调度任务）                                               #
+    # ------------------------------------------------------------------ #
+
+    def get_all_group_items(self) -> List[Tuple[str, WantedItem]]:
+        """返回所有群通缉 (gid, item) 列表。"""
+        result: List[Tuple[str, WantedItem]] = []
+        for gid, items in self._group.items():
+            for item in items:
+                result.append((gid, item))
+        return result
+
+    def get_all_personal_items(self) -> List[Tuple[str, WantedItem]]:
+        """返回所有个人通缉 (qq, item) 列表。"""
+        result: List[Tuple[str, WantedItem]] = []
+        for qq, items in self._personal.items():
+            for item in items:
+                result.append((qq, item))
+        return result
+
+    def get_wanted_list_for_monitor(self) -> List[WantedDetail]:
+        """
+        返回一个适合监控查询的通缉列表 [ {uid, watchers} ]
+        将群通缉和个人通缉合并，按 uid 分组。
+        """
+        # uid -> List[Watcher]
+        uid_to_watchers: Dict[str, List[Watcher]] = {}
+
+        # 收集群通缉
+        for gid, items in self._group.items():
+            for item in items:
+                uid = item.id
+                if uid not in uid_to_watchers:
+                    uid_to_watchers[uid] = []
+                uid_to_watchers[uid].append(
+                    Watcher(
+                        id="",  # 群通缉者 id 为空
+                        gid=gid,
+                        level=item.notice_level,
+                        arena_on=item.arena_on,
+                        grand_arena_on=item.grand_arena_on,
+                    )
+                )
+
+        # 收集个人通缉
+        for qq, items in self._personal.items():
+            for item in items:
+                uid = item.id
+                if uid not in uid_to_watchers:
+                    uid_to_watchers[uid] = []
+                uid_to_watchers[uid].append(
+                    Watcher(
+                        id=qq,  # 个人通缉者 id 为 qq
+                        gid=item.gid,
+                        level=item.notice_level,
+                        arena_on=item.arena_on,
+                        grand_arena_on=item.grand_arena_on,
+                    )
+                )
+
+        # 转换为 WantedDetail 列表
+        result = []
+        for uid, watchers in uid_to_watchers.items():
+            result.append(WantedDetail(uid=uid, watchers=sort_watchers(watchers)))
+        return result
 
     # ------------------------------------------------------------------ #
     # 迁移                                                                 #
     # ------------------------------------------------------------------ #
 
-    def migrate_from_old(
-        self, old_wanted: LegacyWantedBind, old_watch: LegacyWatchBind
-    ):
+    def migrate_from_old(self, old_wanted: "LegacyWantedBind") -> None:
         """
-        从旧数据迁移。
-        old_wanted: wanted_bind  { gid: [uid, ...] }  -> group wanted, notice_level=1
-        old_watch:  watch_bind   { gid: [uid, ...] }  -> group watched, notice_level=2
+        从旧 wanted_binds.json 的 wanted_bind 字典迁移为群通缉。
+        old_wanted: { gid: [uid, ...] }  -> group, notice_level=1
         不覆盖已有数据。
         """
         for gid, uid_list in old_wanted.items():
             gid = str(gid)
-            if gid in self._data["group"]:
-                continue  # 已有数据，跳过
-            items = [
-                Wanted(uid=str(uid), watch_at=3, notice_level=1).to_dict()
-                for uid in uid_list
-            ]
-            self._data["group"][gid] = items
-
-        for gid, uid_list in old_watch.items():
-            gid = str(gid)
-            existing = {w["uid"] for w in self._data["group"].get(gid, [])}
-            extra = [
-                Wanted(uid=str(uid), watch_at=3, notice_level=2).to_dict()
-                for uid in uid_list
-                if str(uid) not in existing
-            ]
-            if extra:
-                self._data["group"].setdefault(gid, []).extend(extra)
-
-        self.save()
+            if gid in self._group:
+                continue
+            self._group[gid] = [WantedItem(id=str(uid), gid=gid) for uid in uid_list]
 
 
 LegacyWantedBind: TypeAlias = Dict[str, List[str]]

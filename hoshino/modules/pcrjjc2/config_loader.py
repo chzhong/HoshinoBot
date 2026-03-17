@@ -13,6 +13,8 @@ from os.path import dirname, exists, join
 from typing import Dict, Final, List, Optional
 
 import yaml
+from croniter import croniter
+
 from .schema import (
     CheckConfig,
     CheckConfigMap,
@@ -132,7 +134,7 @@ def _parse_subscriptions(raw: SubscriptionConfigDict) -> SubscriptionConfig:
     items: SubscriptionMap = {}
     for qq, subs in (raw.get("items") or {}).items():
         sub_item: List[SubscriptionItem] = []
-        for sub in (subs or []):
+        for sub in subs or []:
             sub_item.append(SubscriptionItem.from_dict(sub))
         items[str(qq)] = sub_item
     return SubscriptionConfig(check_config=check_config, items=items)
@@ -149,13 +151,13 @@ def _parse_wanted_list(raw: WantedListConfigDict) -> WantedListConfig:
     group: GroupWantedListMap = {}
     for gid, subs in (raw.get("group") or {}).items():
         sub_item: List[WantedItem] = []
-        for sub in (subs or []):
+        for sub in subs or []:
             sub_item.append(WantedItem.from_group_item(str(gid), sub))
         group[str(gid)] = sub_item
     personal: PersonalWantedListMap = {}
     for qq, subs in (raw.get("personal") or {}).items():
         sub_item = []
-        for sub in (subs or []):
+        for sub in subs or []:
             sub_item.append(WantedItem.from_personal_item(str(qq), sub))
         personal[str(qq)] = sub_item
     return WantedListConfig(check_config=check_config, group=group, personal=personal)
@@ -199,10 +201,6 @@ def get_current_period(
     返回当前时刻所属的时间段（按 periods 顺序，第一个匹配优先）。
     无匹配返回 None，调用方应回退到 'default' 配置。
     """
-    try:
-        from croniter import croniter
-    except ImportError:
-        return None
 
     if now is None:
         now = datetime.now(TZ_CST)

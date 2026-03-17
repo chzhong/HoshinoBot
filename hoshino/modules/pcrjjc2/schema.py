@@ -6,9 +6,28 @@ types.py - pcrjjc2 共享强类型定义
 
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Final, List, Optional, TypedDict, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Final,
+    List,
+    Literal,
+    Optional,
+    Set,
+    TypedDict,
+    Union,
+)
 
 from typing_extensions import TypeAlias
+
+if TYPE_CHECKING:
+    import logging
+
+    import nonebot  # 只在类型检查时导入，运行时完全不执行
+
+Bot: TypeAlias = "nonebot.NoneBot"
+Logger: TypeAlias = "logging.Logger"
 
 QQID: TypeAlias = int
 QQGroupId: TypeAlias = int
@@ -77,6 +96,9 @@ class Period:
         return Period(
             name=d["name"], description=d.get("description", ""), cron=d["cron"]
         )
+
+
+AddWatchSubResult: TypeAlias = Literal["ok", "dup", "full"]
 
 
 class SubscriptionItemLikeDict(TypedDict):
@@ -156,7 +178,6 @@ class SubscriptionConfig:
 class BaseWantedItemDict(TypedDict):
     id: str  # 通缉对象的 uid
     note: Optional[str]
-    watch_at: Optional[int]
     notice_level: Optional[int]
     arena_on: Optional[bool]
     grand_arena_on: Optional[bool]
@@ -173,17 +194,54 @@ class GroupWantedItemDict(BaseWantedItemDict):
 PersonalWantedListDict: TypeAlias = Dict[str, List[PersonalWantedItemDict]]
 GroupWantedListDict: TypeAlias = Dict[str, List[Union[GroupWantedItemDict, str, int]]]
 
-WATCH_AT_NONE: Final = 0
-WATCH_AT_ARENA: Final = 1
-WATCH_AT_GRAND_ARENA: Final = 2
-WATCH_AT_BOTH: Final = WATCH_AT_ARENA | WATCH_AT_GRAND_ARENA
-
 NOTICE_LEVEL_NONE: Final = 0
+"""
+默认频率，仅通知上线信息。
+"""
+
 NOTICE_LEVEL_DEFAULT: Final = 1
+"""
+默认检测频率, 默认通报(jjc/pjjc)设置。
+"""
+
 NOTICE_LEVEL_ATTENTION: Final = 2
+"""
+默认检测频率, 但在14:00~14:59期间会强制通报双场的排名变化。
+"""
+
 NOTICE_LEVEL_HIGH_BEFORE_SETTLEMENT: Final = 3
+"""
+结算前临时提高检测和通报频率(1分一次)，强制通报双场的排名变化。
+"""
+
 NOTICE_LEVEL_HIGH_TODAY: Final = 4
+"""
+日常重置(05:00)之前临时提高检测和通报频率(1分一次)。
+"""
+
 NOTICE_LEVEL_HIGH: Final = 5
+"""
+高通报频率(1分一次)。挖矿期间也通报
+"""
+
+NOTICE_LEVEL_HIGH_MIN: Final = NOTICE_LEVEL_HIGH_BEFORE_SETTLEMENT
+NOTICE_LEVEL_HIGH_MAX: Final = NOTICE_LEVEL_HIGH
+
+
+def is_high_notice_level(level: int) -> bool:
+    """
+    判断一个通知级别是否为高频。高频意味着1分钟检测和通报一次。
+    """
+    return NOTICE_LEVEL_HIGH_MIN <= level and level <= NOTICE_LEVEL_HIGH_MAX
+
+
+def is_attention_level(level: int) -> bool:
+    """
+    判断一个通知级别是否为关注级。关注级意味着14:00~14:59期间强制通报双场排名变化。
+    """
+    return (
+        level == NOTICE_LEVEL_ATTENTION or level == NOTICE_LEVEL_HIGH_BEFORE_SETTLEMENT
+    )
 
 
 @dataclass
@@ -192,9 +250,8 @@ class WantedItem:
     gid: str  # 通缉消息发送群。群通缉同群号
     by: str = ""  # 通缉者的 qq。个人通缉同个人 qq 号
     note: str = ""
-    watch_at: int = WATCH_AT_BOTH
     notice_level: int = NOTICE_LEVEL_DEFAULT
-    arena_on: bool = True    # jjc 通知开关
+    arena_on: bool = True  # jjc 通知开关
     grand_arena_on: bool = True  # pjjc 通知开关
 
     def to_dict(self) -> Union[PersonalWantedItemDict, GroupWantedItemDict]:
@@ -205,8 +262,6 @@ class WantedItem:
         d = self.to_dict()
         if not self.note:
             d.pop("note", None)
-        if self.watch_at == WATCH_AT_BOTH:
-            d.pop("watch_at", None)
         if self.notice_level == NOTICE_LEVEL_DEFAULT:
             d.pop("notice_level", None)
         if self.arena_on:
@@ -219,7 +274,6 @@ class WantedItem:
     def _is_all_default(self) -> bool:
         return (
             not self.note
-            and self.watch_at == WATCH_AT_BOTH
             and self.notice_level == NOTICE_LEVEL_DEFAULT
             and self.arena_on
             and self.grand_arena_on
@@ -241,7 +295,9 @@ class WantedItem:
         return d
 
     @staticmethod
-    def from_dict(d: Union[PersonalWantedItemDict, GroupWantedItemDict]) -> "WantedItem":
+    def from_dict(
+        d: Union[PersonalWantedItemDict, GroupWantedItemDict],
+    ) -> "WantedItem":
         gid = d.get("gid")
         by = d.get("by")
         return WantedItem(
@@ -249,7 +305,6 @@ class WantedItem:
             gid=str(gid) if gid else "",
             by=str(by) if by else "",
             note=d.get("note", ""),
-            watch_at=d.get("watch_at", WATCH_AT_BOTH),
             notice_level=d.get("notice_level", NOTICE_LEVEL_DEFAULT),
             arena_on=bool(d.get("arena_on", True)),
             grand_arena_on=bool(d.get("grand_arena_on", True)),
@@ -353,29 +408,9 @@ class Config:
         return d
 
 
-# See profile_example.json
 @dataclass
-class PcrEmblem:
-    emblem_id: int
-    ex_value: 0
+class SubscriberArenaGroups:
+    """订阅者的竞技场场号集合（用于判断同场）。"""
 
-
-@dataclass
-class PcrUserInfo:
-    viewer_id: int
-    user_name: str
-    user_comment: str
-    team_level: int
-    team_exp: int
-    emblem: PcrEmblem
-    last_login_time: int
-    arena_rank: int
-    arena_group: int
-    grand_arena_rank: int
-    grand_arena_group: int
-    open_story_num: int
-    unit_num: int
-    total_power: int
-    tower_cleared_floor_num: int
-    tower_cleared_ex_quest_count: int
-    friend_num: int
+    arena_groups: Set[int]  # jjc 场号集合
+    grand_arena_groups: Set[int]  # pjjc 场号集合
