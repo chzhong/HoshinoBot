@@ -292,7 +292,7 @@ class CheckContext:
         if cc.interval == 0:
             return now.hour == 15 and now.minute == 0
 
-        delayer = Delayer.fixed(delay) if delay is not None else Delayer.fixed(cc.delay)
+        delayer = Delayer.fixed(delay) if delay is not None else Delayer.random(cc.delay)
 
         check = (now.minute % cc.interval) == 0
         if check:
@@ -318,7 +318,7 @@ class CheckContext:
             else:
                 return None
 
-        delayer = Delayer.fixed(delay) if delay is not None else Delayer.fixed(cc.delay)
+        delayer = Delayer.fixed(delay) if delay is not None else Delayer.random(cc.delay)
 
         check = (now.minute % cc.interval) == 0
         if check:  # 符合延迟要求，检测所有
@@ -354,6 +354,7 @@ async def fetch_and_update(
     entry = ctx.round_cache[uid]
     async with entry:
         if entry:
+            logger.info(f"[monitor] use cached result for uid={uid}")
             return entry.value
         else:
             logger = ctx.logger
@@ -548,9 +549,13 @@ async def check_subscriptions(
     *,
     delay: Optional[int] = None,
 ):
+    logger = ctx.logger
     check = await ctx.should_check_subscription(delay=delay)
     if not check:
+        logger.info('[monitor] skipped subscription check')
         return
+
+    logger.info('[monitor] checking ranks for subscribers...')
 
     # 按 qq 分组：qq -> {gid -> [SubscriptionItem]}
     by_user: Dict[str, Dict[str, List[SubscriptionItem]]] = defaultdict(
@@ -565,6 +570,8 @@ async def check_subscriptions(
     for qq, groups in by_user.items():
         for gid, items in groups.items():
             await _check_user_subscriptions_in_group(ctx, qq, gid, items)
+
+    logger.info('[monitor] done checking ranks for subscribers.')
 
 
 async def _check_user_subscriptions_in_group(
@@ -619,11 +626,14 @@ async def check_wanted(
     2. 群+人都通缉的（通报在前，@ 人在后）
     3. 单独群通缉的
     """
+    logger = ctx.logger
     wanted_items_all = wanted_manager.get_wanted_list_for_monitor()
     wanted_items_to_check = await ctx.should_check_wanted(wanted_items_all, delay=delay)
     if not wanted_items_to_check:
+        logger.info('[monitor] skipped wanted check')
         return
 
+    logger.info('[monitor] checking wanted ranks...')
     # 第一步：检测所有 uid 的变更状态
     # uid -> (WantedDetail, RankDiff)
     uid_diffs: Dict[str, Tuple[WantedDetail, RankDiff]] = {}
@@ -631,6 +641,8 @@ async def check_wanted(
         diff = await fetch_and_update(ctx, wanted_detail.uid)
         if diff is not None:
             uid_diffs[wanted_detail.uid] = (wanted_detail, diff)
+
+    logger.info('[monitor] done checking wanted ranks.')
 
     if not uid_diffs:
         return  # 没有任何变更

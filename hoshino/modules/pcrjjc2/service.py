@@ -40,7 +40,7 @@ _curpath = dirname(__file__)
 _binds_path = join(_curpath, "binds.json")
 _wanted_path = join(_curpath, "wanted_binds.json")
 
-BACKUP_MIGRATED = False
+BACKUP_MIGRATED = True
 
 _cfg = load_config()
 _arena_svc = ArenaService(_cfg, cache_db, get_bot(), sv.logger)
@@ -59,7 +59,7 @@ _arena_svc.migrate(
 async def on_schedule():
     if _arena_svc is None:
         return
-    _arena_svc.on_schedule()
+    await _arena_svc.on_schedule(sync=True)
 
 
 # ============================================================

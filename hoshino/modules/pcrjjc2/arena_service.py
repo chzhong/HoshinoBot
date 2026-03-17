@@ -492,7 +492,7 @@ class ArenaService:
         """
         检测订阅和通缉
         """
-
+        self._logger.info("[arena_service] checking ranks on schedule...")
         ctx = rank_monitor.CheckContext(
             bot=self._bot,
             logger=self._logger,
@@ -517,6 +517,7 @@ class ArenaService:
         每个群聚合成一条 @ 消息，同一 uid 在本轮只查询一次 API。
         委托给 rank_monitor.check_subscriptions() 执行。
         """
+        #self._logger.info("[arena_service] checking ranks for subscribers...")
         await rank_monitor.check_subscriptions(ctx, self._sub_mgr, delay=delay)
 
     async def check_wanted(
@@ -531,6 +532,7 @@ class ArenaService:
         委托给 rank_monitor.check_wanted() 执行。
         检测后处理 notice_level 降级（settlement/次日5点）。
         """
+        #self._logger.info("[arena_service] checking wanted ranks...")
         await rank_monitor.check_wanted(ctx, self._wanted_mgr, delay=delay)
 
         # notice_level 降级逻辑

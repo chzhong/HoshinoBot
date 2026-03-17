@@ -1,6 +1,6 @@
 from typing import Optional, TypedDict
 
-from typing_extensions import Never
+#from typing_extensions import Never
 
 
 class Emblem(TypedDict):
@@ -55,5 +55,5 @@ class UserInfoExtra(TypedDict):
 
 
 class UserInfoCache(UserInfoEx, UserInfoExtra):
-    emblem: Never
-    viewer_id: Never
+    emblem: None
+    viewer_id: None

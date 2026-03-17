@@ -15,11 +15,17 @@ curl -L "https://gitee.com/zhch186/fonts/raw/master/ubuntu.ttf" \
 
 # Noto Sans Mono CJK SC VF
 echo "下载 Noto Sans Mono CJK SC VF..."
-curl -L "https://gitee.com/zhch186/fonts/raw/master/NotoSansMonoCJKsc-VF.ttf" \
+#curl -L "https://gitee.com/zhch186/fonts/raw/master/NotoSansMonoCJKsc-VF.ttf" \
+curl -L "https://github.com/notofonts/noto-cjk/raw/refs/heads/main/Sans/Variable/TTF/Mono/NotoSansMonoCJKsc-VF.ttf" \
      -o "NotoSansMonoCJKsc-VF.ttf"
+
+echo "下载 Noto Emoji..."
+curl -L "https://gitee.com/zhch186/fonts/raw/master/NotoEmoji-Regular.ttf" \
+     -o "NotoEmoji-Regular.ttf"
 
 echo "=== 创建符号链接 ==="
 ln -sf "NotoSansMonoCJKsc-VF.ttf" "mono.ttf"
+ln -sf "NotoEmoji-Regular.ttf" "emoji.ttf"
 
 echo "=== 完成 ==="
 ls -lh
