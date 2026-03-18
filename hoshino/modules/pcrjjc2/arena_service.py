@@ -15,7 +15,6 @@ ArenaService 持有配置、订阅管理器、通缉管理器和 Redis DAO，对
 import asyncio
 import json
 import os
-import threading
 from dataclasses import dataclass
 from datetime import datetime
 from os.path import exists
@@ -100,12 +99,6 @@ class ArenaService:
         self._cache = cache
         self._bot = bot
         self._logger = logger
-        self._loop = asyncio.new_event_loop()
-        self._loop_thread = threading.Thread(
-            target=self._loop.run_forever, daemon=True, name="check-worker"
-        )
-        self._loop_thread.start()
-
         # 启动时重置 notice_level（清理临时提升的级别）
         if reset_notice_levels:
             self._reset_notice_levels_on_startup()
@@ -474,25 +467,32 @@ class ArenaService:
     # 调度                                                                 #
     # ------------------------------------------------------------------ #
 
-    async def on_schedule(self, *, sync: bool = False, now: Optional[datetime] = None):
+    def on_schedule(self, *, now: Optional[datetime] = None):
         """
         执行定时任务
 
-        :param sync: True 表示在当前线程执行并等待结果；False 会在专用线程执行
+        :param on_new_looper: True 会在专用 Looper 执行; False 表示在当前线程执行并等待结果.
         """
-        if sync:
-            await self.check(now)
-        else:
-            asyncio.run_coroutine_threadsafe(
-                self.check(now),
-                self._loop,
-            )
+        current_loop = asyncio.get_event_loop()
+        return current_loop.create_task(self.check(reason="scheduler", now=now))
 
-    async def check(self, now: Optional[datetime] = None, delay: Optional[int] = None):
+    async def check(
+        self,
+        *,
+        reason: Optional[str] = None,
+        now: Optional[datetime] = None,
+        delay: Optional[int] = None,
+    ):
         """
         检测订阅和通缉
         """
-        self._logger.info("[arena_service] checking ranks on schedule...")
+        delay_hint = (
+            "" if rank_monitor.Delayer.is_no_delay(delay) else "(might with delay)"
+        )
+
+        self._logger.info(
+            f"[arena_service] checking ranks {delay_hint} (reason={reason})..."
+        )
         ctx = rank_monitor.CheckContext(
             bot=self._bot,
             logger=self._logger,
@@ -501,15 +501,14 @@ class ArenaService:
             now=now,
         )
         await asyncio.gather(
-            self.check_arena_subscriptions(ctx, now=now, delay=delay),
-            self.check_wanted(ctx, now=now, delay=delay),
+            self.check_arena_subscriptions(ctx, delay=delay),
+            self.check_wanted(ctx, delay=delay),
         )
 
     async def check_arena_subscriptions(
         self,
         ctx: rank_monitor.CheckContext,
         *,
-        now: Optional[datetime] = None,
         delay: Optional[int] = None,
     ) -> None:
         """
@@ -517,14 +516,13 @@ class ArenaService:
         每个群聚合成一条 @ 消息，同一 uid 在本轮只查询一次 API。
         委托给 rank_monitor.check_subscriptions() 执行。
         """
-        #self._logger.info("[arena_service] checking ranks for subscribers...")
+        # self._logger.info("[arena_service] checking ranks for subscribers...")
         await rank_monitor.check_subscriptions(ctx, self._sub_mgr, delay=delay)
 
     async def check_wanted(
         self,
         ctx: rank_monitor.CheckContext,
         *,
-        now: Optional[datetime] = None,
         delay: Optional[int] = None,
     ) -> None:
         """
@@ -532,7 +530,7 @@ class ArenaService:
         委托给 rank_monitor.check_wanted() 执行。
         检测后处理 notice_level 降级（settlement/次日5点）。
         """
-        #self._logger.info("[arena_service] checking wanted ranks...")
+        # self._logger.info("[arena_service] checking wanted ranks...")
         await rank_monitor.check_wanted(ctx, self._wanted_mgr, delay=delay)
 
         # notice_level 降级逻辑
@@ -543,25 +541,32 @@ class ArenaService:
         # 15:00 settlement：level=2/3 → level=1
         if now.hour == 15 and now.minute == 0:
             need_save = self._reset_notice_level(
-                NOTICE_LEVEL_HIGH_BEFORE_SETTLEMENT, NOTICE_LEVEL_DEFAULT
+                NOTICE_LEVEL_HIGH_BEFORE_SETTLEMENT,
+                NOTICE_LEVEL_DEFAULT,
+                "settlement time",
             )
 
         # 次日 05:00：level=4 → level=1
         if now.hour == 5 and now.minute == 0:
             need_save = (
-                self._reset_notice_level(NOTICE_LEVEL_HIGH_TODAY, NOTICE_LEVEL_DEFAULT)
+                self._reset_notice_level(
+                    NOTICE_LEVEL_HIGH_TODAY, NOTICE_LEVEL_DEFAULT, "next pcr day"
+                )
                 or need_save
             )
 
         if need_save:
             self.save_config()
 
-    def _reset_notice_level(self, from_level: int, to_level: int) -> bool:
+    def _reset_notice_level(self, from_level: int, to_level: int, reason: str) -> bool:
         """
         将所有 notice_level == from_level 的通缉项重置为 to_level。
         返回是否有修改。
         """
         modified = False
+        self._logger.info(
+            f"[arena_service] reseting notice level {from_level} to {to_level} (reason={reason})..."
+        )
 
         # 群通缉
         for gid, items in self._wanted_mgr._group.items():
@@ -586,7 +591,7 @@ class ArenaService:
         """
 
         need_save = self._reset_notice_level(
-            NOTICE_LEVEL_HIGH_BEFORE_SETTLEMENT, NOTICE_LEVEL_DEFAULT
+            NOTICE_LEVEL_HIGH_BEFORE_SETTLEMENT, NOTICE_LEVEL_DEFAULT, "start up"
         )
 
         if need_save:

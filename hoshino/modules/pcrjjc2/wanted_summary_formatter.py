@@ -67,9 +67,9 @@ MINE_SIGN: Final = "⛏️"
 DOWN_SIGN: Final = "👇"
 BATT_SIGN: Final = "🤺"
 
-_BATTLE3: Final = WARN_SIGN + BATT_SIGN
-_BATTLE4: Final = WARN_SIGN + BATT_SIGN + BATT_SIGN + WARN_SIGN
-_BATTLE5: Final = BATT_SIGN + BATT_SIGN + BATT_SIGN + BATT_SIGN
+_BATTLE3: Final = WARN_SIGN
+_BATTLE4: Final = BATT_SIGN
+_BATTLE5: Final = WARN_SIGN + BATT_SIGN
 
 
 class MockNow(Protocol):
@@ -126,6 +126,7 @@ class WantedSummaryFormatter:
     def format_headers(self) -> List[Union[str, Cell]]:
         """生成表头。"""
         return [
+            Header(content="#", align="center", min_width="2em"),  # 编号列
             Header(content="昵称", align="center", min_width="20em"),
             Header(
                 content="战斗竞技场",
@@ -143,7 +144,7 @@ class WantedSummaryFormatter:
             ),
             Header(
                 content="上线时间", align="center", min_width="13em"
-            ),  # "03-16 10:20" + " ❓"
+            ),  # "03-16 10:20" + " ?"
             Header(content="UID", align="center", min_width="15em"),  # 13位数字
             Header(content="备注", align="left", min_width="24em"),
         ]
@@ -156,6 +157,7 @@ class WantedSummaryFormatter:
         :return: 表格行（Cell 列表）
         """
         return [
+            Cell(content=str(row.index), align="center"),  # 编号
             self._format_name_cell(row),
             self._format_arena_cell(row),
             self._format_grand_arena_cell(row),
@@ -195,7 +197,12 @@ class WantedSummaryFormatter:
 
     def _format_arena_cell(self, row: WantedSummaryRow) -> Cell:
         bg_color = _COLOR_RED_BRICK_LIGHT if row.same_arena_group else None
-        text_color = _COLOR_GRAY if not row.arena_on else _COLOR_TEXT
+        # 通缉等级为 0 或不通报时，使用灰色
+        text_color = (
+            _COLOR_GRAY
+            if (row.notice_level == NOTICE_LEVEL_NONE or not row.arena_on)
+            else _COLOR_TEXT
+        )
         return self._format_rank_cell(
             row.arena_group,
             row.arena_rank,
@@ -210,7 +217,12 @@ class WantedSummaryFormatter:
         """格式化公主竞技场列。"""
         # 背景色：同场时浅深蓝色
         bg_color = _COLOR_DEEP_BLUE_LIGHT if row.same_grand_arena_group else None
-        text_color = _COLOR_GRAY if not row.grand_arena_on else _COLOR_TEXT
+        # 通缉等级为 0 或不通报时，使用灰色
+        text_color = (
+            _COLOR_GRAY
+            if (row.notice_level == NOTICE_LEVEL_NONE or not row.grand_arena_on)
+            else _COLOR_TEXT
+        )
 
         return self._format_rank_cell(
             row.grand_arena_group,
@@ -323,10 +335,28 @@ class WantedSummaryFormatter:
         now = time.time()
         hours_ago = (now - row.last_login_time) / 3600
 
-        # 格式化时间
-        time_str = time.strftime("%m-%d %H:%M", time.localtime(row.last_login_time))
+        # 转换为本地时间
+        login_time = time.localtime(row.last_login_time)
+        current_date = time.strftime("%m-%d", login_time)
 
-        # 48小时以上未上线，添加 ❓ 标志
+        # 格式化时间
+        # 第一行固定显示日期+时间，后续的行仅有自然日不同时才显示日期
+        if row.index == 1:
+            # 第一行：显示完整的日期+时间
+            time_str = time.strftime("%m-%d %H:%M", login_time)
+        else:
+            # 后续行：只显示时间，除非日期不同
+            if not hasattr(self, "_last_date") or self._last_date != current_date:
+                # 日期不同，显示完整的日期+时间
+                time_str = time.strftime("%m-%d %H:%M", login_time)
+            else:
+                # 日期相同，只显示时间
+                time_str = time.strftime("     %H:%M", login_time)
+
+        # 记录当前日期，供下一行使用
+        self._last_date = current_date
+
+        # 48小时以上未上线，添加 ? 标志
         if hours_ago > 48:
             content = [time_str, " ?"]
         else:
@@ -394,9 +424,9 @@ def render_wanted_summary(
 
     # 群通缉部分
     if group_rows:
-        # 添加分组标题行（跨6列）
+        # 添加分组标题行（跨7列，因为添加了编号列）
         rows.append(
-            [Cell(content=f"群通缉（{len(group_rows)}人）", colspan=6, align="center")]
+            [Cell(content=f"群通缉（{len(group_rows)}人）", colspan=7, align="center")]
         )
         # 添加数据行
         for row in group_rows:
@@ -404,12 +434,12 @@ def render_wanted_summary(
 
     # 个人通缉部分
     if personal_rows:
-        # 添加分组标题行（跨6列）
+        # 添加分组标题行（跨7列，因为添加了编号列）
         rows.append(
             [
                 Cell(
                     content=f"个人通缉（{len(personal_rows)}人）",
-                    colspan=6,
+                    colspan=7,
                     align="center",
                 )
             ]
@@ -418,8 +448,8 @@ def render_wanted_summary(
         for row in personal_rows:
             rows.append(formatter.format_row(row))
 
-    # 渲染表格
-    return render_table(headers=headers, rows=rows, min_col_width=80)
+    # 渲染表格（使用 min_rows 参数确保至少有5行数据）
+    return render_table(headers=headers, rows=rows, min_rows=5)
 
 
 def render_wanted_summary_as_cq(

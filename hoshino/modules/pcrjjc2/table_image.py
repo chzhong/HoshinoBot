@@ -38,10 +38,29 @@ import base64
 import os
 from dataclasses import dataclass, field
 from io import BytesIO
-from typing import Final, List, Literal, Optional, Sequence, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Final,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    TypedDict,
+    Union,
+)
 
 from PIL import Image, ImageDraw, ImageFont
-from typing_extensions import TypeAlias
+from typing_extensions import TypeAlias, Unpack
+
+
+def _get_typed_dict_keys(td: type) -> set:
+    keys = set()
+    for base in td.__mro__:
+        keys.update(getattr(base, "__annotations__", {}).keys())
+    return keys
+
 
 RGBTuple: TypeAlias = Tuple[int, int, int]
 
@@ -727,26 +746,109 @@ def _parse_cell(
         return raw, None, None, 1, None, None, None, None, None
 
 
+class RenderTableOptions(TypedDict, total=False):
+    title: Optional[str]
+    min_width: Optional[int]
+    min_height: Optional[int]
+    min_col_width: Optional[int]
+    min_cols: Optional[int]
+    min_row_height: Optional[int]
+    min_rows: Optional[int]
+    header_font: Union[str, ImageFont.FreeTypeFont, None]
+    header_font_size: Optional[int]
+    cell_font: Union[str, ImageFont.FreeTypeFont, None]
+    cell_font_size: Optional[int]
+
+
+_DEFAULT_RENDER_OPTIONS: RenderTableOptions = {}
+_RENDER_OPTIONS_KEYS = _get_typed_dict_keys(RenderTableOptions)
+
+
+class SaveImageOptions(TypedDict, total=False):
+    format: Optional[str]
+    use_palette: Optional[bool]
+    format_kwargs: Optional[Dict[str, Any]]
+
+
+_DEFAULT_SAVE_OPTIONS: SaveImageOptions = {"format": "PNG"}
+_SAVE_IMAGE_OPTIONS_KEYS = _get_typed_dict_keys(SaveImageOptions)
+
+
+class RenderAndSaveOptions(RenderTableOptions, SaveImageOptions):
+    @staticmethod
+    def split(
+        kwargs: Unpack["RenderAndSaveOptions"],
+    ) -> Tuple[RenderTableOptions, SaveImageOptions]:
+        render_kwargs = {k: v for k, v in kwargs.items() if k in _RENDER_OPTIONS_KEYS}
+        save_kwargs = {k: v for k, v in kwargs.items() if k in _SAVE_IMAGE_OPTIONS_KEYS}
+        return [render_kwargs, save_kwargs]
+
+
 def render_table(
-    headers: Headers,
-    rows: Rows,
-    min_col_width: int = 40,
-    title: str = "",
+    headers: Headers, rows: Rows, **kwargs: Unpack[RenderTableOptions]
 ) -> Image.Image:
     """
     将表格渲染为 PIL Image 对象。
 
-    :param headers:       列标题列表（支持 str / StyledText / Cell）
-    :param rows:          数据行列表（每行元素支持 str / StyledText / Cell）
-    :param min_col_width: 每列最小宽度（像素）
-    :param title:         可选的图片标题（显示在表格上方）
-    :return:              PIL Image 对象
+    :param headers:          列标题列表（支持 str / StyledText / Cell）
+    :param rows:             数据行列表（每行元素支持 str / StyledText / Cell）
+    :param title:            可选的图片标题（显示在表格上方）
+    :param min_width:        图片最小宽度（像素）
+    :param min_height:       图片最小高度（像素）
+    :param min_col_width:    每列最小宽度（像素）
+    :param min_cols:         最小列数（不足时补充空列）
+    :param min_row_height:   最小行高（像素）
+    :param min_rows:         最小行数（不足时补充空行）
+    :param header_font:      标题行字体（字符串路径或 FreeTypeFont 实例）
+    :param header_font_size: 标题行字体大小（header_font 为字符串时有效）
+    :param cell_font:        单元格字体（字符串路径或 FreeTypeFont 实例）
+    :param cell_font_size:   单元格字体大小（cell_font 为字符串时有效）
+    :return:                 PIL Image 对象
     """
-    font = _load_font(CELL_FONT_SIZE)
-    header_font = _load_font(HEADER_FONT_SIZE)
-    title_font = _load_font(HEADER_FONT_SIZE + 2) if title else None
+    # 加载字体
+    opts: RenderTableOptions = {**_DEFAULT_RENDER_OPTIONS, **kwargs}
+    cell_font, cell_font_size = opts.get("cell_font"), opts.get("cell_font_size")
+    if isinstance(cell_font, ImageFont.FreeTypeFont):
+        font = cell_font
+    elif isinstance(cell_font, str):
+        font = _text_font(cell_font, cell_font_size or CELL_FONT_SIZE) or _load_font(
+            cell_font_size or CELL_FONT_SIZE
+        )
+    else:
+        font = _load_font(cell_font_size or CELL_FONT_SIZE)
 
+    header_font, header_font_size = (
+        opts.get("header_font"),
+        opts.get("header_font_size"),
+    )
+    if isinstance(header_font, ImageFont.FreeTypeFont):
+        hdr_font = header_font
+    elif isinstance(header_font, str):
+        hdr_font = _text_font(
+            header_font, header_font_size or HEADER_FONT_SIZE
+        ) or _load_font(header_font_size or HEADER_FONT_SIZE)
+    else:
+        hdr_font = _load_font(header_font_size or HEADER_FONT_SIZE)
+
+    title = opts.get("title")
+    title_font = (
+        _load_font((header_font_size or HEADER_FONT_SIZE) + 2) if title else None
+    )
+    min_cols, min_rows = opts.get("min_cols"), opts.get("min_rows")
+    min_col_width, min_row_height = (
+        opts.get("min_col_width", 0),
+        opts.get("min_row_height", 0),
+    )
+
+    # 补充列数到 min_cols
     n_cols = len(headers)
+    if min_cols and min_cols > n_cols:
+        headers = list(headers) + [""] * (min_cols - n_cols)
+        n_cols = min_cols
+
+    # 补充行数到 min_rows
+    if min_rows and min_rows > len(rows):
+        rows = list(rows) + [[""] * n_cols for _ in range(min_rows - len(rows))]
 
     # ── 计算各列宽度 ──────────────────────────────────────────
     col_widths = [min_col_width] * n_cols
@@ -769,14 +871,14 @@ def render_table(
             try:
                 em_count = float(min_width_str[:-2])
                 # 一个拉丁字符的宽度（使用 'M' 作为参考）
-                char_width = _text_width("M", header_font)
+                char_width = _text_width("M", hdr_font)
                 min_w = int(em_count * char_width) + _CELL_PAD_X * 2
                 col_widths[ci] = max(col_widths[ci], min_w)
             except ValueError:
                 pass  # 忽略无效的 min_width
 
     for ci, h in enumerate(headers):
-        _measure(h, ci, header_font)
+        _measure(h, ci, hdr_font)
     for row in rows:
         for ci, cell in enumerate(row):
             if ci < n_cols:
@@ -785,15 +887,17 @@ def render_table(
     # ── 计算每行的实际高度（支持多行文本）──────────────────
     # 表头行高度
     header_height = CELL_FONT_SIZE + _CELL_PAD_Y * 2 + _BORDER
+    if min_row_height:
+        header_height = max(header_height, min_row_height)
     for ci, raw in enumerate(headers):
         content, _, _, _, _, cell_fg, cell_font, cell_size, _ = _parse_cell(raw)
         default_fg = cell_fg if cell_fg is not None else _COLOR_HEADER_FG
         if cell_font is not None:
-            default_font = _text_font(cell_font, cell_size) or header_font
+            default_font = _text_font(cell_font, cell_size) or hdr_font
         elif cell_size is not None:
             default_font = _load_font(int(cell_size))
         else:
-            default_font = header_font
+            default_font = hdr_font
         segs = _normalize_segments(content, None, default_fg, default_font)
         seg_h = _segments_height(segs)
         header_height = max(header_height, seg_h + _CELL_PAD_Y * 2 + _BORDER)
@@ -802,6 +906,8 @@ def render_table(
     row_heights = []
     for row in rows:
         row_h = CELL_FONT_SIZE + _CELL_PAD_Y * 2 + _BORDER
+        if min_row_height:
+            row_h = max(row_h, min_row_height)
         for ci in range(n_cols):
             raw = row[ci] if ci < len(row) else ""
             content, _, _, _, _, cell_fg, cell_font, cell_size, _ = _parse_cell(raw)
@@ -820,6 +926,14 @@ def render_table(
     total_width = sum(col_widths) + _BORDER
     title_height = (header_height + 4) if title else 0
     total_height = title_height + header_height + sum(row_heights) + _BORDER
+
+    min_width, min_height = opts.get("min_width"), opts.get("min_height")
+
+    # 应用最小宽度和高度
+    if min_width:
+        total_width = max(total_width, min_width)
+    if min_height:
+        total_height = max(total_height, min_height)
 
     img = Image.new("RGB", (total_width, total_height), _COLOR_BG)
     draw = ImageDraw.Draw(img)
@@ -854,11 +968,11 @@ def render_table(
         # 使用 Cell 级别属性作为默认值
         default_fg = cell_fg if cell_fg is not None else _COLOR_HEADER_FG
         if cell_font is not None:
-            default_font = _text_font(cell_font, cell_size) or header_font
+            default_font = _text_font(cell_font, cell_size) or hdr_font
         elif cell_size is not None:
             default_font = _load_font(int(cell_size))
         else:
-            default_font = header_font
+            default_font = hdr_font
 
         segs = _normalize_segments(content, cell_bg, default_fg, default_font)
         header_layouts.append(
@@ -935,34 +1049,73 @@ def render_table(
     return img
 
 
-def image_to_cq(img: Image.Image) -> str:
+def image_to_cq(img: Image.Image, **kwargs: Unpack[SaveImageOptions]) -> str:
     """
     把 Image 转换为 CQ 码。
+
+    :param img:           PIL Image 对象
+    :param format:        图片格式（PNG, JPEG 等）
+    :param use_palette:   是否使用调色板模式（P 模式）以减小文件大小。默认开启。
+    :param format_kwargs: 保存图片时的附加参数
+    :return:              CQ 码字符串
     """
+    opts: SaveImageOptions = {**_DEFAULT_SAVE_OPTIONS, **kwargs}
+    format_str = opts.get("format", "PNG")
+    use_palette = opts.get("use_palette", True)
+    format_kwargs = opts.get("format_kwargs", {})
+
+    # 转换为调色板模式以减小文件大小
+    if use_palette and img.mode == "RGB" and format_str.upper() == "PNG":
+        img = img.quantize(colors=256, method=Image.FASTOCTREE)
+
     bio = BytesIO()
-    img.save(bio, format="PNG")
+    save_kwargs = dict(format_kwargs) if format_kwargs else {}
+    if format_str.upper() == "PNG" and "optimize" not in save_kwargs:
+        save_kwargs["optimize"] = True
+    img.save(bio, format=format_str, **save_kwargs)
     b64 = base64.b64encode(bio.getvalue()).decode()
     return f"[CQ:image,file=base64://{b64}]"
 
 
 def render_table_as_cq(
-    headers: Headers,
-    rows: Rows,
-    min_col_width: int = 40,
-    title: str = "",
+    headers: Headers, rows: Rows, **kwargs: Unpack[RenderAndSaveOptions]
 ) -> str:
     """渲染表格并返回 CQ 码字符串（用于 QQ 消息发送）。"""
-    img = render_table(headers, rows, min_col_width=min_col_width, title=title)
-    return image_to_cq(img)
+    render_kwargs, save_kwargs = RenderAndSaveOptions.split(kwargs)
+    img = render_table(headers, rows, **render_kwargs)
+    return image_to_cq(img, **save_kwargs)
+
+
+def save_image(img: Image.Image, path: str, **kwargs: Unpack[SaveImageOptions]):
+    """
+    把 Image 保存到给定路径，。
+
+    :param img:           PIL Image 对象
+    :param path:          要保存到的路径
+    :param format:        图片格式（PNG, JPEG 等）。缺省时根据 path 推测。
+    :param use_palette:   是否使用调色板模式（P 模式）以减小文件大小。
+    :param format_kwargs: 保存图片时的附加参数
+    """
+    opts: SaveImageOptions = {**_DEFAULT_SAVE_OPTIONS, **kwargs}
+    format_str = (
+        opts.get("format") or os.path.splitext(path)[1].lstrip(".").upper() or "PNG"
+    )
+    use_palette = opts.get("use_palette", False)  # 保存文件时默认不使用调色板
+    format_kwargs = opts.get("format_kwargs", {})
+
+    if use_palette and img.mode == "RGB" and format_str.upper() == "PNG":
+        img = img.quantize(colors=256, method=Image.FASTOCTREE)
+
+    save_kwargs = dict(format_kwargs) if format_kwargs else {}
+    if format_str.upper() == "PNG" and "optimize" not in save_kwargs:
+        save_kwargs["optimize"] = True
+    img.save(path, format=format_str, **save_kwargs)
 
 
 def render_table_as_file(
-    headers: Headers,
-    rows: Rows,
-    path: str,
-    min_col_width: int = 40,
-    title: str = "",
+    headers: Headers, rows: Rows, path: str, **kwargs: Unpack[RenderAndSaveOptions]
 ) -> None:
     """渲染表格并保存为本地文件（用于测试和调试）。"""
-    img = render_table(headers, rows, min_col_width=min_col_width, title=title)
-    img.save(path)
+    render_kwargs, save_kwargs = RenderAndSaveOptions.split(kwargs)
+    img = render_table(headers, rows, **render_kwargs)
+    save_image(img, path, **save_kwargs)

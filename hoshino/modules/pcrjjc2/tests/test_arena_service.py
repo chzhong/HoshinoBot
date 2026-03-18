@@ -868,7 +868,7 @@ class TestCheckWanted(unittest.TestCase):
                 config=svc._config,
                 now=now or mkt(10, 0),
             )
-            run(svc.check_wanted(ctx, now=now, delay=delay))
+            run(svc.check_wanted(ctx, delay=delay))
 
         return mock_bot
 
@@ -1177,7 +1177,7 @@ class TestCheckWanted(unittest.TestCase):
                 config=svc._config,
                 now=mkt(10, 0),
             )
-            run(svc.check_wanted(ctx, now=mkt(10, 0), delay=0))
+            run(svc.check_wanted(ctx, delay=0))
 
         # 应该只调用一次 get_profile
         self.assertEqual(call_count, 1, "同一 uid 应该只查询一次 API")
@@ -1332,7 +1332,7 @@ class TestDelayBehavior(unittest.TestCase):
                 config=svc._config,
                 now=mkt(10, 0),
             )
-            run(svc.check_wanted(ctx, now=mkt(10, 0), delay=5))
+            run(svc.check_wanted(ctx, delay=5))
 
         # 验证 sleep 被调用
         mock_sleep.assert_called()
@@ -1439,7 +1439,7 @@ class TestRaceCondition(unittest.TestCase):
             # 先执行订阅检测
             run(svc.check_arena_subscriptions(ctx, delay=0))
             # 再执行通缉检测（使用同一个 ctx，会命中 round_cache）
-            run(svc.check_wanted(ctx, now=mkt(10, 0), delay=0))
+            run(svc.check_wanted(ctx, delay=0))
 
         # 验证：API 只被调用了 1 次（第二次命中 CheckContext 的 round_cache）
         self.assertEqual(call_count, 1)
@@ -1485,7 +1485,7 @@ class TestRaceCondition(unittest.TestCase):
             )
 
             # 先执行通缉检测
-            run(svc.check_wanted(ctx, now=mkt(10, 0), delay=0))
+            run(svc.check_wanted(ctx, delay=0))
             # 再执行订阅检测（使用同一个 ctx，会命中 round_cache）
             run(svc.check_arena_subscriptions(ctx, delay=0))
 
@@ -1554,7 +1554,7 @@ class TestRaceCondition(unittest.TestCase):
             async def concurrent_check():
                 await asyncio.gather(
                     svc.check_arena_subscriptions(ctx, delay=0),
-                    svc.check_wanted(ctx, now=mkt(10, 0), delay=0),
+                    svc.check_wanted(ctx, delay=0),
                 )
 
             run(concurrent_check())
@@ -1867,7 +1867,7 @@ class TestWantedSummaryFormatter(unittest.TestCase):
         """普通昵称直接显示字符串。"""
         row = self._make_row(user_name="テスト")
         cells = self.formatter.format_row(row)
-        self.assertEqual(cells[0].content, "テスト")
+        self.assertEqual(cells[1].content, "テスト")  # 第1列是昵称（第0列是编号）
 
     def test_yuki_with_clan_only(self):
         """佑树 + 公会名：上标为公会名，无下标。"""
@@ -1875,7 +1875,7 @@ class TestWantedSummaryFormatter(unittest.TestCase):
             user_name="佑树", clan_name="骑士团", avatar_unit_name=None
         )
         cells = self.formatter.format_row(row)
-        content = cells[0].content
+        content = cells[1].content  # 第1列是昵称
         self.assertIsInstance(content, self.StyledText)
         self.assertEqual(content.text, "佑树")
         self.assertIsNotNone(content.sup)
@@ -1886,7 +1886,7 @@ class TestWantedSummaryFormatter(unittest.TestCase):
         """佑树 + 头像：下标为头像名，无上标。"""
         row = self._make_row(user_name="佑树", clan_name=None, avatar_unit_name="春田")
         cells = self.formatter.format_row(row)
-        content = cells[0].content
+        content = cells[1].content  # 第1列是昵称
         self.assertIsInstance(content, self.StyledText)
         self.assertEqual(content.text, "佑树")
         self.assertIsNone(content.sup)
@@ -1901,7 +1901,7 @@ class TestWantedSummaryFormatter(unittest.TestCase):
             user_name="佑树", clan_name="骑士团", avatar_unit_name="春田"
         )
         cells = self.formatter.format_row(row)
-        content = cells[0].content
+        content = cells[1].content  # 第1列是昵称
         self.assertIsInstance(content, self.StyledText)
         self.assertEqual(content.text, "佑树")
         # 上标：公会名，灰色
@@ -1917,7 +1917,7 @@ class TestWantedSummaryFormatter(unittest.TestCase):
         """佑树但无公会名和头像：直接显示字符串。"""
         row = self._make_row(user_name="佑树", clan_name=None, avatar_unit_name=None)
         cells = self.formatter.format_row(row)
-        self.assertEqual(cells[0].content, "佑树")
+        self.assertEqual(cells[1].content, "佑树")
 
     def test_yuki_render_to_image(self):
         """佑树上下标能正常渲染为图片（不抛异常）。"""
@@ -2411,12 +2411,17 @@ class TestSubscriptionStatusImage(unittest.TestCase):
 
         # 调用实际的渲染函数生成图片
         from ..arena_service import render_subscription_status
+        from ..table_image import save_image
 
         img = render_subscription_status(rows)
 
         # 保存图片
         output_path = os.path.join(os.path.dirname(__file__), "_test_arena_sub.png")
-        img.save(output_path)
+        output_rgb_path = os.path.join(
+            os.path.dirname(__file__), "_test_arena_sub.rgb.png"
+        )
+        save_image(img, output_path, use_palette=True)
+        save_image(img, output_rgb_path)
 
         # 验证文件生成
         self.assertTrue(os.path.exists(output_path))
@@ -2629,13 +2634,18 @@ class TestWantedSummaryImage(unittest.TestCase):
                     row.mock_now = datetime(2024, 3, 11, 10, 0, 0)
 
         # 调用实际的渲染函数生成图片
+        from ..table_image import save_image
         from ..wanted_summary_formatter import render_wanted_summary
 
         img = render_wanted_summary(group_rows, personal_rows, now_hour=10)
 
         # 保存图片
         output_path = os.path.join(os.path.dirname(__file__), "_test_arena_wanted.png")
-        img.save(output_path)
+        output_rgb_path = os.path.join(
+            os.path.dirname(__file__), "_test_arena_wanted.rgb.png"
+        )
+        save_image(img, output_path, use_palette=True)
+        save_image(img, output_rgb_path)
 
         # 验证文件生成
         self.assertTrue(os.path.exists(output_path))

@@ -1029,19 +1029,20 @@ from ..wanted_summary_formatter import (
 formatter = WantedSummaryFormatter(now_hour=10)
 headers = formatter.format_headers()
 
-check("headers 长度为 6", len(headers), 6)
-check("第1列为昵称", headers[0].content, "昵称")
-check("第2列为战斗竞技场", headers[1].content, "战斗竞技场")
-check("第3列为公主竞技场", headers[2].content, "公主竞技场")
-check("第4列为上线时间", headers[3].content, "上线时间")
-check("第5列为UID", headers[4].content, "UID")
-check("第6列为备注", headers[5].content, "备注")
+check("headers 长度为 7", len(headers), 7)
+check("第1列为编号", headers[0].content, "#")
+check("第2列为昵称", headers[1].content, "昵称")
+check("第3列为战斗竞技场", headers[2].content, "战斗竞技场")
+check("第4列为公主竞技场", headers[3].content, "公主竞技场")
+check("第5列为上线时间", headers[4].content, "上线时间")
+check("第6列为UID", headers[5].content, "UID")
+check("第7列为备注", headers[6].content, "备注")
 
 # 检查表头背景色
 from ..wanted_summary_formatter import _COLOR_DEEP_BLUE, _COLOR_RED_BRICK
 
-check("战斗竞技场表头背景色", headers[1].bg_color, _COLOR_RED_BRICK)
-check("公主竞技场表头背景色", headers[2].bg_color, _COLOR_DEEP_BLUE)
+check("战斗竞技场表头背景色", headers[2].bg_color, _COLOR_RED_BRICK)
+check("公主竞技场表头背景色", headers[3].bg_color, _COLOR_DEEP_BLUE)
 
 section("wanted_summary_formatter: format_row (normal)")
 
@@ -1072,9 +1073,10 @@ row_normal = WantedSummaryRow(
 )
 
 row_cells = formatter.format_row(row_normal)
-check("row 长度为 6", len(row_cells), 6)
-check("昵称单元格内容", row_cells[0].content, "测试用户")
-check("UID单元格内容", row_cells[4].content, "1012345678901")
+check("row 长度为 7", len(row_cells), 7)
+check("编号单元格内容", row_cells[0].content, "1")
+check("昵称单元格内容", row_cells[1].content, "测试用户")
+check("UID单元格内容", row_cells[5].content, "1012345678901")
 
 section("wanted_summary_formatter: format_row (佑树)")
 
@@ -1106,7 +1108,7 @@ row_yuki = WantedSummaryRow(
 
 row_yuki_cells = formatter.format_row(row_yuki)
 # 佑树的昵称单元格应该是 StyledText，包含上标（公会名）
-name_cell_content = row_yuki_cells[0].content
+name_cell_content = row_yuki_cells[1].content  # 第1列是昵称（第0列是编号）
 check("佑树昵称单元格是 StyledText", isinstance(name_cell_content, StyledText), True)
 check("佑树昵称文本", name_cell_content.text, "佑树")
 check("佑树有上标（公会名）", name_cell_content.sup is not None, True)
@@ -1140,7 +1142,7 @@ row_yuki_avatar = WantedSummaryRow(
 )
 
 row_yuki_avatar_cells = formatter.format_row(row_yuki_avatar)
-name_cell_avatar = row_yuki_avatar_cells[0].content
+name_cell_avatar = row_yuki_avatar_cells[1].content
 check(
     "佑树（带头像）昵称单元格是 StyledText",
     isinstance(name_cell_avatar, StyledText),
@@ -1183,8 +1185,8 @@ row_same_cells = formatter.format_row(row_same_arena)
 # 同场时应该有背景色
 from ..wanted_summary_formatter import _COLOR_DEEP_BLUE_LIGHT, _COLOR_RED_BRICK_LIGHT
 
-check("同场jjc背景色", row_same_cells[1].bg_color, _COLOR_RED_BRICK_LIGHT)
-check("同场pjjc背景色", row_same_cells[2].bg_color, _COLOR_DEEP_BLUE_LIGHT)
+check("同场jjc背景色", row_same_cells[2].bg_color, _COLOR_RED_BRICK_LIGHT)
+check("同场pjjc背景色", row_same_cells[3].bg_color, _COLOR_DEEP_BLUE_LIGHT)
 
 section("wanted_summary_formatter: format_row (mining)")
 
@@ -1217,7 +1219,7 @@ row_mining = WantedSummaryRow(
 row_mining_cells = formatter.format_row(row_mining)
 # 挖矿状态应该在单元格内容中包含 ⛏️
 # 由于内容是 StyledText 列表，我们检查是否包含 ⛏️ 符号
-arena_cell_content = row_mining_cells[1].content
+arena_cell_content = row_mining_cells[2].content
 has_mining_icon = any(
     MINE_SIGN in (seg.text if hasattr(seg, "text") else seg)
     for seg in arena_cell_content
@@ -1254,7 +1256,7 @@ row_muted = WantedSummaryRow(
 
 row_muted_cells = formatter.format_row(row_muted)
 # 不通报状态应该在单元格内容中包含 🔇
-arena_cell_content = row_muted_cells[1].content
+arena_cell_content = row_muted_cells[2].content
 has_mute_icon = any(
     MUTE_SIGN in (seg.text if hasattr(seg, "text") else seg)
     for seg in arena_cell_content
@@ -1274,196 +1276,6 @@ check("render 返回 CQ 码", result.startswith("[CQ:image,file=base64://"), Tru
 # 测试空列表
 result_empty = render_wanted_summary_as_cq([], [], now_hour=10)
 check("空列表返回提示文字", result_empty, "暂无通缉犯")
-
-# 输出测试图片（用于人工验证效果）
-from ..table_image import Cell, render_table_as_file
-
-formatter = WantedSummaryFormatter(now_hour=14)  # 14点显示 ⚠️ 标志
-headers = formatter.format_headers()
-
-# 创建更多测试数据以展示各种状态
-test_rows = [
-    # 正常状态
-    WantedSummaryRow(
-        index="6",
-        uid="1012345678901",
-        user_name="正常用户",
-        avatar_unit_name=None,
-        clan_name="测试公会A",
-        arena_group=123,
-        arena_rank=50,
-        arena_challenges=5,
-        arena_mining=False,
-        arena_on=True,
-        grand_arena_group=456,
-        grand_arena_rank=80,
-        grand_arena_challenges=3,
-        grand_arena_mining=False,
-        grand_arena_on=True,
-        last_login_time=1710000000,
-        note="正常",
-        notice_level=1,
-        same_arena_group=False,
-        same_grand_arena_group=False,
-        arena_str="-jjc6-",
-        grand_arena_str="-pjjc6-",
-    ),
-    # 同场
-    WantedSummaryRow(
-        index="7",
-        uid="1012345678902",
-        user_name="同场用户",
-        avatar_unit_name=None,
-        clan_name="测试公会B",
-        arena_group=123,
-        arena_rank=30,
-        arena_challenges=8,
-        arena_mining=False,
-        arena_on=True,
-        grand_arena_group=456,
-        grand_arena_rank=60,
-        grand_arena_challenges=6,
-        grand_arena_mining=False,
-        grand_arena_on=True,
-        last_login_time=1710000000,
-        note="同场",
-        notice_level=2,
-        same_arena_group=True,
-        same_grand_arena_group=True,
-        arena_str="-jjc7-",
-        grand_arena_str="-pjjc7-",
-    ),
-    # 挖矿中
-    WantedSummaryRow(
-        index="8",
-        uid="1012345678903",
-        user_name="挖矿用户",
-        avatar_unit_name=None,
-        clan_name="测试公会C",
-        arena_group=0,
-        arena_rank=15001,
-        arena_challenges=0,
-        arena_mining=True,
-        arena_on=True,
-        grand_arena_group=0,
-        grand_arena_rank=88888,
-        grand_arena_challenges=0,
-        grand_arena_mining=True,
-        grand_arena_on=True,
-        last_login_time=1710000000,
-        note="挖矿",
-        notice_level=3,
-        same_arena_group=False,
-        same_grand_arena_group=False,
-        arena_str="-jjc8-",
-        grand_arena_str="-pjjc8-",
-    ),
-    # 跌出前100
-    WantedSummaryRow(
-        index=9,
-        uid="1012345678904",
-        user_name="跌出用户",
-        avatar_unit_name=None,
-        clan_name="测试公会D",
-        arena_group=123,
-        arena_rank=150,
-        arena_challenges=0,
-        arena_mining=False,
-        arena_on=True,
-        grand_arena_group=456,
-        grand_arena_rank=200,
-        grand_arena_challenges=0,
-        grand_arena_mining=False,
-        grand_arena_on=True,
-        last_login_time=1710000000 - 3600 * 50,  # 50小时前
-        note="跌出",
-        notice_level=1,
-        same_arena_group=False,
-        same_grand_arena_group=False,
-        arena_str="-jjc9-",
-        grand_arena_str="-pjjc9-",
-    ),
-    # 不通报
-    WantedSummaryRow(
-        index=10,
-        uid="1012345678905",
-        user_name="不通报用户",
-        avatar_unit_name=None,
-        clan_name="测试公会E",
-        arena_group=123,
-        arena_rank=70,
-        arena_challenges=2,
-        arena_mining=False,
-        arena_on=False,
-        grand_arena_group=456,
-        grand_arena_rank=345,
-        grand_arena_challenges=1,
-        grand_arena_mining=False,
-        grand_arena_on=False,
-        last_login_time=1710000000,
-        note="不通报",
-        notice_level=0,
-        same_arena_group=False,
-        same_grand_arena_group=False,
-        arena_str="-jjc10-",
-        grand_arena_str="-pjjc10-",
-    ),
-    # 佑树（默认名）
-    WantedSummaryRow(
-        index=11,
-        uid="1012345678906",
-        user_name="佑树",
-        avatar_unit_name=None,
-        clan_name="测试公会F",
-        arena_group=123,
-        arena_rank=40,
-        arena_challenges=10,
-        arena_mining=False,
-        arena_on=True,
-        grand_arena_group=456,
-        grand_arena_rank=50,
-        grand_arena_challenges=8,
-        grand_arena_mining=False,
-        grand_arena_on=True,
-        last_login_time=1710000000,
-        note="佑树",
-        notice_level=4,
-        same_arena_group=False,
-        same_grand_arena_group=False,
-        arena_str="-jjc11-",
-        grand_arena_str="-pjjc11-",
-    ),
-]
-
-# 分组：前3个为群通缉，后3个为个人通缉
-group_test_rows = test_rows[:3]
-personal_test_rows = test_rows[3:]
-
-# 构建表格数据
-all_rows = []
-if group_test_rows:
-    all_rows.append(
-        [Cell(content=f"群通缉（{len(group_test_rows)}人）", colspan=6, align="center")]
-    )
-    for row in group_test_rows:
-        all_rows.append(formatter.format_row(row))
-if personal_test_rows:
-    all_rows.append(
-        [
-            Cell(
-                content=f"个人通缉（{len(personal_test_rows)}人）",
-                colspan=6,
-                align="center",
-            )
-        ]
-    )
-    for row in personal_test_rows:
-        all_rows.append(formatter.format_row(row))
-
-# 输出测试图片
-out_path = os.path.join(os.path.dirname(__file__), "_test_wanted_summary_test.png")
-render_table_as_file(headers=headers, rows=all_rows, path=out_path, min_col_width=80)
-print(f"  测试图片已输出到: {out_path}")
 
 # ── 结果汇总 ──────────────────────────────────────────────────────────
 section("结果")

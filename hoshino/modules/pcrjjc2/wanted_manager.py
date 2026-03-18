@@ -40,13 +40,19 @@ class Watcher:
         """
         判断在给定的小时是否应该通告jjc排名变化
         """
-        return self.arena_on or (hour == 14 or self.is_attention_level)
+        # notice_level = 0 时不通报排名变化
+        if self.level == 0:
+            return False
+        return self.arena_on or (hour == 14 and self.is_attention_level)
 
     def should_notice_grand_arena(self, hour: int):
         """
         判断在给定的小时是否应该通告pjjc排名变化
         """
-        return self.grand_arena_on or (hour == 14 or self.is_attention_level)
+        # notice_level = 0 时不通报排名变化
+        if self.level == 0:
+            return False
+        return self.grand_arena_on or (hour == 14 and self.is_attention_level)
 
     @property
     def is_attention_level(self):

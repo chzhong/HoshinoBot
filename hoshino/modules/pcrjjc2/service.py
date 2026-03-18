@@ -59,7 +59,7 @@ _arena_svc.migrate(
 async def on_schedule():
     if _arena_svc is None:
         return
-    await _arena_svc.on_schedule(sync=True)
+    _arena_svc.on_schedule()
 
 
 # ============================================================

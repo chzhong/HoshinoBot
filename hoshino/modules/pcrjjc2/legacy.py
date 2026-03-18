@@ -3,7 +3,8 @@ from nonebot import get_bot, on_command
 from hoshino import priv
 from hoshino.typing import NoticeSession
 from .pcrclient import pcrclient, ApiException
-from .jjcdata import jjcdata, charadata
+from .jjcdata import jjcdata
+from .charadata import charadata
 from asyncio import Lock
 from os.path import dirname, join, exists
 from copy import deepcopy

@@ -2,7 +2,6 @@
 rank_monitor.py - 排名监控核心逻辑
 
 职责：
-  - should_check()：根据 config 的 periods + check_config 判断本分钟是否检测
   - fetch_and_update()：查询单个 uid 的最新排名，对比 Redis 基准，返回 RankDiff
   - build_subscription_lines()：将 RankDiff 转换为订阅通知行（供 arena_service 聚合）
   - build_wanted_message()：将 RankDiff 转换为通缉通报消息（含上线/改名/攻击计数）
@@ -27,10 +26,8 @@ from .config_loader import TZ_CST, get_check_config, get_current_period
 from .jjcdata import jjcdata
 from .schema import (
     Bot,
-    CheckConfigMap,
     Config,
     Logger,
-    Period,
     SubscriptionItem,
     WantedItem,
 )
@@ -133,31 +130,6 @@ class Delayer:
         if delay is None or Delayer.is_no_delay(delay):
             return
         await asyncio.sleep(delay)
-
-
-async def should_check(
-    periods: List[Period],
-    check_config: CheckConfigMap,
-    now: Optional[datetime] = None,
-) -> bool:
-    """
-    根据 periods + check_config 判断本分钟是否执行检测，并施加随机延迟。
-
-    settlement（interval=0）：仅 15:00 触发一次，不延迟。
-    其余时段：按 interval 取余，在 delay 范围内随机延迟后返回 True。
-    """
-    now = now or datetime.now(TZ_CST)
-    period = get_current_period(periods, now=now)
-    period_name = period.name if period else "default"
-    cc = get_check_config(check_config, period_name)
-
-    if cc.interval == 0:
-        return now.hour == 15 and now.minute == 0
-
-    check = (now.minute % cc.interval) == 0
-    if check and cc.delay > 0:
-        await asyncio.sleep(random.randint(0, cc.delay))
-    return check
 
 
 # ── API 查询 + Redis 更新 ─────────────────────────────────────────────
@@ -292,7 +264,9 @@ class CheckContext:
         if cc.interval == 0:
             return now.hour == 15 and now.minute == 0
 
-        delayer = Delayer.fixed(delay) if delay is not None else Delayer.random(cc.delay)
+        delayer = (
+            Delayer.fixed(delay) if delay is not None else Delayer.random(cc.delay)
+        )
 
         check = (now.minute % cc.interval) == 0
         if check:
@@ -318,7 +292,9 @@ class CheckContext:
             else:
                 return None
 
-        delayer = Delayer.fixed(delay) if delay is not None else Delayer.random(cc.delay)
+        delayer = (
+            Delayer.fixed(delay) if delay is not None else Delayer.random(cc.delay)
+        )
 
         check = (now.minute % cc.interval) == 0
         if check:  # 符合延迟要求，检测所有
@@ -352,12 +328,12 @@ async def fetch_and_update(
     返回 RankDiff 或 None。
     """
     entry = ctx.round_cache[uid]
+    logger = ctx.logger
     async with entry:
         if entry:
             logger.info(f"[monitor] use cached result for uid={uid}")
             return entry.value
         else:
-            logger = ctx.logger
             cache = ctx.cache
 
             try:
@@ -437,10 +413,10 @@ def build_subscription_lines(
 # ── 通缉通报消息 ──────────────────────────────────────────────────────
 
 
-class NoticeSwitch(Protocol):
+class NoticeItem(Protocol):
     arena_on: bool
     grand_arena_on: bool
-    note: str  # 备注
+    note: Optional[str]  # 备注
 
 
 def _check_key(d1: dict, d2: dict, key: str) -> bool:
@@ -448,7 +424,7 @@ def _check_key(d1: dict, d2: dict, key: str) -> bool:
 
 
 def build_wanted_message(
-    item: NoticeSwitch,
+    item: NoticeItem,
     diff: RankDiff,
     cache: jjcdata,
 ) -> Optional[str]:
@@ -485,7 +461,10 @@ def build_wanted_message(
 
     # 改名检测
     if _check_key(new, last, "user_name") and new["user_name"] != last.get("user_name"):
-        change_name_notice = f" 改名为 {new['user_name']}(UID: {diff.uid}) "
+        wanted_note = f"{item.note}, " if item.note else ""
+        change_name_notice = (
+            f" 改名为 {new['user_name']}({wanted_note}UID: {diff.uid}) "
+        )
     else:
         change_name_notice = ""
 
@@ -552,10 +531,10 @@ async def check_subscriptions(
     logger = ctx.logger
     check = await ctx.should_check_subscription(delay=delay)
     if not check:
-        logger.info('[monitor] skipped subscription check')
+        logger.info("[monitor] skipped subscription check")
         return
 
-    logger.info('[monitor] checking ranks for subscribers...')
+    logger.info("[monitor] checking ranks for subscribers...")
 
     # 按 qq 分组：qq -> {gid -> [SubscriptionItem]}
     by_user: Dict[str, Dict[str, List[SubscriptionItem]]] = defaultdict(
@@ -571,7 +550,7 @@ async def check_subscriptions(
         for gid, items in groups.items():
             await _check_user_subscriptions_in_group(ctx, qq, gid, items)
 
-    logger.info('[monitor] done checking ranks for subscribers.')
+    logger.info("[monitor] done checking ranks for subscribers.")
 
 
 async def _check_user_subscriptions_in_group(
@@ -630,10 +609,10 @@ async def check_wanted(
     wanted_items_all = wanted_manager.get_wanted_list_for_monitor()
     wanted_items_to_check = await ctx.should_check_wanted(wanted_items_all, delay=delay)
     if not wanted_items_to_check:
-        logger.info('[monitor] skipped wanted check')
+        logger.info("[monitor] skipped wanted check")
         return
 
-    logger.info('[monitor] checking wanted ranks...')
+    logger.info("[monitor] checking wanted ranks...")
     # 第一步：检测所有 uid 的变更状态
     # uid -> (WantedDetail, RankDiff)
     uid_diffs: Dict[str, Tuple[WantedDetail, RankDiff]] = {}
@@ -642,7 +621,7 @@ async def check_wanted(
         if diff is not None:
             uid_diffs[wanted_detail.uid] = (wanted_detail, diff)
 
-    logger.info('[monitor] done checking wanted ranks.')
+    logger.info("[monitor] done checking wanted ranks.")
 
     if not uid_diffs:
         return  # 没有任何变更

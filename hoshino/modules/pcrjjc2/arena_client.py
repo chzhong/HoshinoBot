@@ -7,7 +7,7 @@ arena_client.py - PCR API 客户端封装（DAO 层）
 
 from asyncio import Lock
 
-from .jjcdata import charadata
+from .charadata import charadata
 from .pcrclient import ApiException, pcrclient
 from .pcrclient_types import Profile, UserInfoEx
 
