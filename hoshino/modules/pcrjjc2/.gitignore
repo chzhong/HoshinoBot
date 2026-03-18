@@ -3,6 +3,7 @@ wanted_binds*.json
 wanted*.json
 config.yaml
 subscriptions*.json
+CHARA_NAME.json
 *.png
 *.py.*
 *.json.*

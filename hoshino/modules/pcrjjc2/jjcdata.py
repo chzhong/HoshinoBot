@@ -127,8 +127,8 @@ class jjcdata:
         jjc_challenge = self._redis.get(jjc_key) or 0
         pjjc_key = f"pcrbot:pjjc_challenge:{today}:{uid}"
         pjjc_challenge = self._redis.get(pjjc_key) or 0
-        user_info["arena_challenge"] = int(jjc_challenge)
-        user_info["grand_arena_challenge"] = int(pjjc_challenge)
+        user_info["arena_challenge"] = jjc_challenge
+        user_info["grand_arena_challenge"] = pjjc_challenge
         return user_info
 
     def cache_user_jjc_challenge(self, uid: PcrUidLike):
