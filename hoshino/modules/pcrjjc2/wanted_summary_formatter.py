@@ -351,7 +351,7 @@ class WantedSummaryFormatter:
                 time_str = time.strftime("%m-%d %H:%M", login_time)
             else:
                 # 日期相同，只显示时间
-                time_str = time.strftime("     %H:%M", login_time)
+                time_str = time.strftime("      %H:%M", login_time)
 
         # 记录当前日期，供下一行使用
         self._last_date = current_date

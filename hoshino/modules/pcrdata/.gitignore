@@ -1,0 +1,14 @@
+binds*.json
+wanted_binds*.json
+wanted*.json
+config.yaml
+subscriptions*.json
+CHARA_NAME.json
+*.png
+*.py.*
+*.json.*
+fonts/
+tests/*
+!tests/__init__.py
+!tests/test_*.py
+cache/

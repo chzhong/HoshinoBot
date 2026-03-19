@@ -9,7 +9,7 @@ from asyncio import Lock
 from os.path import dirname, join, exists
 from copy import deepcopy
 from traceback import format_exc
-from .safeservice import SafeService
+from hoshino.safeservice import SafeService
 from datetime import datetime
 from typing import Dict
 from .legacy_utils import send_summary

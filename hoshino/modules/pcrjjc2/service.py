@@ -15,12 +15,12 @@ from os.path import dirname, join
 from typing import Optional, Tuple
 
 from hoshino import get_bot
+from hoshino.safeservice import SafeService
 
 from .arena_client import ApiException, get_profile
 from .arena_service import ArenaService, render_subscription_status_cq
 from .config_loader import load_config
 from .jjcdata import jjcdata
-from .safeservice import SafeService
 from .schema import WantedItem
 from .service_help import sv_help
 

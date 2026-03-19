@@ -213,12 +213,6 @@ class CheckContext:
         self._wanted_check_config = wanted_check_config
         self._round_cache: RoundCache = RoundCache()
 
-    def get_id_lock(self, id_: str) -> asyncio.Lock:
-        """每个 id 一把锁，防止对同一 id 并发重复请求"""
-        if id_ not in self._round_cache_locks:
-            self._round_cache_locks[id_] = asyncio.Lock()
-        return self._round_cache_locks[id_]
-
     @property
     def bot(self):
         return self._bot
@@ -563,7 +557,6 @@ async def _check_user_subscriptions_in_group(
     处理单个用户在单个群的订阅列表。
     查询每个 uid（命中本轮缓存则跳过 API），比对基准，聚合变动行后发一条 @ 消息。
     """
-    cache = ctx.cache
     logger = ctx.logger
     bot = ctx.bot
     lines: List[str] = []
@@ -581,13 +574,11 @@ async def _check_user_subscriptions_in_group(
         lines.extend(sub_lines)
 
     if lines:
-        message = "\\n".join(lines) + f" [CQ:at,qq={qq}]"
+        message = "\n".join(lines) + f" [CQ:at,qq={qq}]"
         try:
             await bot.send_group_msg(group_id=int(gid), message=message)
         except Exception:
-            logger.info(
-                f"[monitor] 发送订阅通知失败 gid={gid} qq={qq}\\n{format_exc()}"
-            )
+            logger.info(f"[monitor] 发送订阅通知失败 gid={gid} qq={qq}\n{format_exc()}")
 
 
 # ── 通缉监控 ──────────────────────────────────────────────────────────
