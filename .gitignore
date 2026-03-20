@@ -138,6 +138,8 @@ CLAUDE.md
 
 # mkdocs documentation
 /site
+log/
+fonts/
 
 # mypy
 .mypy_cache/
