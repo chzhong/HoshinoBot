@@ -1,14 +1,12 @@
 FROM python:3.11-slim-trixie
+EXPOSE 8080
 
 # 1. 设置环境变量 (合并同类项)
 ENV TZ=Asia/Shanghai \
     DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    # 优化点 2: 在此处预设 pip 源，后续所有 pip 命令自动生效
-    PIP_INDEX_URL=https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple \
-    PIP_TRUSTED_HOST=mirrors.tuna.tsinghua.edu.cn
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 COPY fonts/ /usr/shared/fonts/chinese/
 
@@ -28,7 +26,8 @@ RUN set -eux; \
     # 设置时区
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo $TZ > /etc/timezone \
-    && python -m pip install --upgrade pip
+    && pip install -i https://mirrors.aliyun.com/pypi/simple/ --upgrade pip \
+    && pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
 
 
 # 4. 设置工作目录 (代码将挂载到此)
@@ -39,7 +38,10 @@ COPY **/requirements.txt ./
 
 # 3. 安装 Python 依赖 (利用缓存层加速构建)
 RUN pip install --no-cache-dir -r requirements.txt && \
-    find . -name "requirements.txt" -path "*/modules/*" -exec pip install --no-cache-dir -r {} \;
+    find . -name "requirements.txt" -path "*/modules/*" -exec pip install --no-cache-dir -r {} \; && \
+    pip list
 
 # 5. 启动命令 (根据 docker inspect 结果调整)
 CMD ["python3", "run.py"]
+
+EXPOSE 8080

@@ -426,7 +426,7 @@ def build_wanted_message(
     根据 RankDiff 和通缉条目的开关，生成通缉通报消息字符串。
     返回 None 表示本次无需通报。
 
-    通缉逻辑（与旧 legacy 一致）：
+    通缉逻辑：
       - 上线检测：last_login_time 距上次 > 3分钟 → 显示上线时间
       - 改名检测：user_name 变化 → 显示新名
       - jjc 排名上升（数字减小）→ 攻击计数 +1，只要 item.arena_on 且 watch_at 含 jjc

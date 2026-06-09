@@ -1,6 +1,6 @@
 # HoshinoBot
 [![License](https://img.shields.io/github/license/Ice-Cirno/HoshinoBot)](LICENSE)
-![Python Version](https://img.shields.io/badge/python-3.8+-blue)
+![Python Version](https://img.shields.io/badge/python-3.11+-blue)
 ![Nonebot Version](https://img.shields.io/badge/nonebot-1.6.0%2B%2C%202.0.0---blue)
 [![试用/赞助群](https://img.shields.io/badge/试用/赞助-Hoshinoのお茶会-brightgreen)](https://jq.qq.com/?_wv=1027&k=eYGgrL4A)
 [![开发交流群](https://img.shields.io/badge/开发交流-Hoshinoの后花园-brightgreen)](https://jq.qq.com/?_wv=1027&k=wgirhYYQ)
@@ -117,6 +117,74 @@ QQ群[![试用/赞助群](https://img.shields.io/badge/试用/赞助-Hoshinoの�
 - 《[Linux 下部署一个公主连结 qq 群聊机器人](https://cn.pcrbot.com/deploy-a-priconne-bot-on-linux/)》作者：[地河君_official](https://github.com/Chendihe4975)
 - 《[Windows 给新人的简易部署指南](https://github.com/Soung2279/Mirai-Bot-Setup)》作者：[SYoung](https://github.com/Soung2279)
 - 《[使用 Docker 部署 HoshinoBot 与 yobot](https://cn.pcrbot.com/depoly-with-docker/)》作者：[yuudi](https://github.com/yuudi)
+
+### 本仓库快速部署
+
+#### 环境要求
+
+- **Python 3.11+**（本地开发与 Docker 基础镜像 `python:3.11-slim-trixie` 一致）
+- 无头 QQ 客户端：[go-cqhttp](https://github.com/Mrs4s/go-cqhttp) 或 [CQHTTP Mirai](https://github.com/yyuueexxiinngg/cqhttp-mirai)
+- 默认启用模块见 `hoshino/config_example/__bot__.py` 中的 `MODULES_ON`（当前含 `botmanage`、`groupmaster`、`tietie`、`pcrjjc2`）
+
+#### 安装依赖
+
+框架与各插件的依赖分散在多个 `requirements.txt` 中，**请使用仓库自带的安装脚本**，不要只安装根目录的 `requirements.txt`：
+
+```bash
+git clone https://github.com/Ice-Cirno/HoshinoBot.git
+cd HoshinoBot
+python3 install_deps.py
+```
+
+根目录 `requirements.txt` 仅包含 nonebot、aiocqhttp 等框架依赖；`pcrjjc2`、`pcrdata`、`tietie` 等插件另有独立依赖（如 `pycryptodome`、`redis`、`msgpack`）。
+
+#### 配置与运行
+
+```bash
+cp -r hoshino/config_example hoshino/config
+# 编辑 hoshino/config/__bot__.py（PORT、SUPERUSERS、MODULES_ON 等）
+python3 run.py
+```
+
+`pcrjjc2` 表格图片渲染需要模块内字体，首次部署请执行：
+
+```bash
+bash hoshino/modules/pcrjjc2/download-fonts.sh
+```
+
+#### Docker 镜像
+
+仓库根目录提供 `Dockerfile`，基于 `python:3.11-slim-trixie`，监听端口 **8080**。构建前请确保本地存在 `fonts/` 目录（已在 `.gitignore` 中，需自行准备）。
+
+```bash
+# 在项目根目录
+DOCKER_BUILDKIT=1 docker build --platform linux/amd64 -t pcrbot/hoshinobot:pcrjjc2 .
+
+# 若远端无法 docker pull，可打包离线传输（含全部 layer，无需预装基础镜像）
+docker save pcrbot/hoshinobot:pcrjjc2 | gzip > hoshinobot-pcrjjc2.tar.gz
+# 远端：gunzip -c hoshinobot-pcrjjc2.tar.gz | docker load
+```
+
+运行时需将代码与配置挂载进容器（镜像内仅预装 Python 依赖，不含业务代码）：
+
+```bash
+docker run -d --name hoshino \
+  -p 8080:8080 \
+  -v /path/to/HoshinoBot:/HoshinoBot \
+  pcrbot/hoshinobot:pcrjjc2
+```
+
+> **⚠️ Docker 镜像：插件依赖安装可能不完整**
+>
+> 当前 `Dockerfile` 在构建时通过 `find . -path "*/modules/*" -name requirements.txt` 安装各插件依赖。在部分构建环境下，该步骤可能**未能正确安装**插件 requirements（例如缺少 `pycryptodome`，运行时报 `ModuleNotFoundError: No module named 'Crypto'`）。
+>
+> 构建完成后建议检查：
+>
+> ```bash
+> docker run --rm pcrbot/hoshinobot:pcrjjc2 pip show pycryptodome redis msgpack
+> ```
+>
+> 若缺失，可在容器启动后手动补装，或在本机构建镜像前改用 `install_deps.py` 的逻辑显式安装各插件依赖。本地非 Docker 部署请始终使用 `python3 install_deps.py`，可避免此问题。
 
 <details>
   <summary>（点击查看旧文档）</summary>

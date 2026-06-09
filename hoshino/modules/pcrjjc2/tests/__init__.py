@@ -1,9 +1,4 @@
-"""
-pcrjjc2/__init__.py - 功能开关入口
-
-USE_NEW_LOGIC = False  →  加载旧逻辑（legacy.py），行为与重构前完全一致
-USE_NEW_LOGIC = True   →  加载新逻辑（service.py），自完成迁移和初始化
-"""
+"""pcrjjc2 tests - 测试运行时禁用非测试模块"""
 
 import os
 import sys

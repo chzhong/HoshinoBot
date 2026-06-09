@@ -1,11 +1,10 @@
 """
-service.py - pcrjjc2 Controller 层（USE_NEW_LOGIC = True 时生效）
+service.py - pcrjjc2 Controller 层
 
 职责：
   - 创建 SafeService（sv）
   - 模块导入时自完成订阅数据迁移 + ArenaService 初始化
-  - 通缉/关注沿用旧逻辑：直接操作 wanted_binds.json 的 dict，不使用 WantedManager
-  - 注册 cron 调度任务（订阅用新逻辑，通缉用旧逻辑）
+  - 注册 cron 调度任务
   - 注册命令 handler（薄层：参数解析 + 权限判断 → 调用各模块方法）
 """
 

@@ -1,15 +1,10 @@
 """
-pcrjjc2/__init__.py - 功能开关入口
-
-USE_NEW_LOGIC = False  →  加载旧逻辑（legacy.py），行为与重构前完全一致
-USE_NEW_LOGIC = True   →  加载新逻辑（service.py），自完成迁移和初始化
+pcrjjc2/__init__.py - 模块入口
 """
 
 import os
 import sys
 import types
-
-from .flags import USE_NEW_LOGIC
 
 
 def _disable_module(name: str):
@@ -29,9 +24,3 @@ def _disable_module(name: str):
 if not bool(os.environ.get("TEST")):
     # disable TEST modules unless we start tests
     _disable_module("tests")
-
-if USE_NEW_LOGIC:
-    _disable_module("legacy")
-    _disable_module("legacy_utils")
-else:
-    _disable_module("service")
