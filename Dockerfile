@@ -1,4 +1,4 @@
-FROM python:3.8-slim-bullseye
+FROM python:3.11-slim-trixie
 
 # 1. 设置环境变量 (合并同类项)
 ENV TZ=Asia/Shanghai \
@@ -7,15 +7,15 @@ ENV TZ=Asia/Shanghai \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     # 优化点 2: 在此处预设 pip 源，后续所有 pip 命令自动生效
-    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-    PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
+    PIP_INDEX_URL=https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple \
+    PIP_TRUSTED_HOST=mirrors.tuna.tsinghua.edu.cn
 
 COPY fonts/ /usr/shared/fonts/chinese/
 
 # 2. 系统层优化 (合并层、配置源、安装依赖、清理)
 RUN set -eux; \
-    sed -i 's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list \
-    && sed -i 's|http://security.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list \
+    sed -i 's|http://deb.debian.org|https://mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
+    && sed -i 's|http://security.debian.org|https://mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
     # 更新并安装依赖
     && apt-get update \
     && apt-get install -y --no-install-recommends \
