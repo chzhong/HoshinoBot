@@ -110,62 +110,90 @@ QQ群[![试用/赞助群](https://img.shields.io/badge/试用/赞助-Hoshinoの�
 
 ## 部署指南
 
-**由于酷Q已停止运营，您可以使用[go-cqhttp](https://github.com/Mrs4s/go-cqhttp)或[CQHTTP Mirai](https://github.com/yyuueexxiinngg/cqhttp-mirai)作为无头QQ客户端。**
+HoshinoBot 通过反向 WebSocket 与 QQ 客户端通信。QQ 客户端方案迭代快、生命周期短，**本仓库不再推荐或维护任何具体客户端**，请自行搜索社区攻略并完成客户端侧配置。
 
-旧文档已失效（新文档正在编写中...），请参考由 [pcrbot 社区](https://github.com/pcrbot)提供的部署指南：
+### 环境要求
 
-- 《[Linux 下部署一个公主连结 qq 群聊机器人](https://cn.pcrbot.com/deploy-a-priconne-bot-on-linux/)》作者：[地河君_official](https://github.com/Chendihe4975)
-- 《[Windows 给新人的简易部署指南](https://github.com/Soung2279/Mirai-Bot-Setup)》作者：[SYoung](https://github.com/Soung2279)
-- 《[使用 Docker 部署 HoshinoBot 与 yobot](https://cn.pcrbot.com/depoly-with-docker/)》作者：[yuudi](https://github.com/yuudi)
+| 组件 | 版本 | 说明 |
+|------|------|------|
+| Python | **3.11** | 本地部署与 Docker 镜像一致；更高版本（如 3.12）可自行验证 |
+| Debian | **13 (Trixie)** | Docker 基础镜像 `python:3.11-slim-trixie` 所用发行版 |
+| 操作系统 | Debian 12+ / Ubuntu 22.04+ | 裸机部署建议；版本过低请**自行升级** |
 
-### 本仓库快速部署
+默认启用模块见 `hoshino/config_example/__bot__.py` 的 `MODULES_ON`（当前含 `botmanage`、`groupmaster`、`tietie`、`pcrjjc2`）。
 
-#### 环境要求
-
-- **Python 3.11+**（本地开发与 Docker 基础镜像 `python:3.11-slim-trixie` 一致）
-- 无头 QQ 客户端：[go-cqhttp](https://github.com/Mrs4s/go-cqhttp) 或 [CQHTTP Mirai](https://github.com/yyuueexxiinngg/cqhttp-mirai)
-- 默认启用模块见 `hoshino/config_example/__bot__.py` 中的 `MODULES_ON`（当前含 `botmanage`、`groupmaster`、`tietie`、`pcrjjc2`）
-
-#### 安装依赖
-
-框架与各插件的依赖分散在多个 `requirements.txt` 中，**请使用仓库自带的安装脚本**，不要只安装根目录的 `requirements.txt`：
+### 系统部署
 
 ```bash
 git clone https://github.com/Ice-Cirno/HoshinoBot.git
 cd HoshinoBot
-python3 install_deps.py
-```
-
-根目录 `requirements.txt` 仅包含 nonebot、aiocqhttp 等框架依赖；`pcrjjc2`、`pcrdata`、`tietie` 等插件另有独立依赖（如 `pycryptodome`、`redis`、`msgpack`）。
-
-#### 配置与运行
-
-```bash
+python3 install_deps.py          # 推荐：安装框架 + 各插件依赖
 cp -r hoshino/config_example hoshino/config
 # 编辑 hoshino/config/__bot__.py（PORT、SUPERUSERS、MODULES_ON 等）
 python3 run.py
 ```
 
-`pcrjjc2` 表格图片渲染需要模块内字体，首次部署请执行：
+依赖也可手动安装，与 `Dockerfile` 中逻辑相同：
+
+```bash
+pip install --no-cache-dir -r requirements.txt && \
+find . -name "requirements.txt" -path "*/modules/*" -exec pip install --no-cache-dir -r {} \;
+```
+
+根目录 `requirements.txt` 仅含 nonebot、aiocqhttp 等框架依赖；`pcrjjc2`、`pcrdata`、`tietie` 等插件另有独立依赖（如 `pycryptodome`、`redis`、`msgpack`）。**不要只安装根目录 requirements.txt。**
+
+`pcrjjc2` 表格图片渲染需模块内字体，首次部署执行：
 
 ```bash
 bash hoshino/modules/pcrjjc2/download-fonts.sh
 ```
 
-#### Docker 镜像
+QQ 客户端的安装与对接不在本仓库维护范围内，请自行查阅攻略，并将反向 WS 地址指向 Hoshino 监听的端口（默认 `8080`）。
 
-仓库根目录提供 `Dockerfile`，基于 `python:3.11-slim-trixie`，监听端口 **8080**。构建前请确保本地存在 `fonts/` 目录（已在 `.gitignore` 中，需自行准备）。
+### Docker 镜像
+
+`Dockerfile` 基于 `python:3.11-slim-trixie`，监听 **8080**。构建前确保本地存在 `fonts/` 目录（已在 `.gitignore` 中，需自行准备）。
+
+#### 本机构建
+
+在已安装 Docker 的机器上，于项目根目录执行：
 
 ```bash
-# 在项目根目录
-DOCKER_BUILDKIT=1 docker build --platform linux/amd64 -t pcrbot/hoshinobot:pcrjjc2 .
+cd /path/to/HoshinoBot
+DOCKER_BUILDKIT=1 docker build -t pcrbot/hoshinobot:pcrjjc2 .
+```
 
-# 若远端无法 docker pull，可打包离线传输（含全部 layer，无需预装基础镜像）
+构建机与运行机架构相同时（例如均为 amd64 Linux），可直接 `docker run`，无需指定 `--platform`。
+
+#### 交叉编译（MBP Apple Silicon → Ubuntu / NAS）
+
+MacBook Pro（Apple Silicon，`linux/arm64`）上构建、在常见 x86_64 服务器或 NAS（`linux/amd64`）上运行时，需指定目标平台：
+
+```bash
+cd /path/to/HoshinoBot
+DOCKER_BUILDKIT=1 docker build \
+  --platform linux/amd64 \
+  -t pcrbot/hoshinobot:pcrjjc2 \
+  .
+```
+
+构建完成后在本机验证架构：
+
+```bash
+docker inspect pcrbot/hoshinobot:pcrjjc2 --format '{{.Architecture}}'
+# 应输出 amd64
+```
+
+#### 离线传输与运行
+
+远端无法 `docker pull` 时，可打包离线传输（含全部 layer，无需预装基础镜像）：
+
+```bash
 docker save pcrbot/hoshinobot:pcrjjc2 | gzip > hoshinobot-pcrjjc2.tar.gz
 # 远端：gunzip -c hoshinobot-pcrjjc2.tar.gz | docker load
 ```
 
-运行时需将代码与配置挂载进容器（镜像内仅预装 Python 依赖，不含业务代码）：
+镜像内仅预装 Python 依赖，业务代码与配置需挂载：
 
 ```bash
 docker run -d --name hoshino \
@@ -176,148 +204,15 @@ docker run -d --name hoshino \
 
 > **⚠️ Docker 镜像：插件依赖安装可能不完整**
 >
-> 当前 `Dockerfile` 在构建时通过 `find . -path "*/modules/*" -name requirements.txt` 安装各插件依赖。在部分构建环境下，该步骤可能**未能正确安装**插件 requirements（例如缺少 `pycryptodome`，运行时报 `ModuleNotFoundError: No module named 'Crypto'`）。
+> `Dockerfile` 通过 `find . -path "*/modules/*" -name requirements.txt` 安装各插件依赖，部分构建环境下该步骤可能**未能正确执行**（例如缺少 `pycryptodome`，报 `ModuleNotFoundError: No module named 'Crypto'`）。
 >
-> 构建完成后建议检查：
+> 构建后建议检查：
 >
 > ```bash
 > docker run --rm pcrbot/hoshinobot:pcrjjc2 pip show pycryptodome redis msgpack
 > ```
 >
-> 若缺失，可在容器启动后手动补装，或在本机构建镜像前改用 `install_deps.py` 的逻辑显式安装各插件依赖。本地非 Docker 部署请始终使用 `python3 install_deps.py`，可避免此问题。
-
-<details>
-  <summary>（点击查看旧文档）</summary>
-
-本bot功能繁多，部分功能需要静态图片资源和带有认证的api key，恕不能公开。本指南将首先带领您搭建具有**模拟抽卡(纯文字版)**、**会战管理**功能的HoshinoBot。其他功能需额外配置，请参考本章**更进一步**的对应小节。
-
-### 部署步骤
-
-#### Windows 部署
-
-1. 安装下面的软件/工具
-    - Python 3.8：https://www.python.org/downloads/windows/
-    - Git：https://git-scm.com/download/win
-    - Notepad++：https://notepad-plus-plus.org/downloads/
-
-2. 安装 酷Q 及 CQHTTP 插件
-
-    - 酷Q Air：https://cqp.cc/t/23253 （如无法打开，使用此下载直链：https://dlsec.cqp.me/cqa-full）
-    - CQHTTP 插件：https://github.com/richardchien/coolq-http-api/releases
-
-    > 初次部署建议先在本地尝试，酷Q Air版即可，待部署成功后再尝试服务器搭建与酷Q Pro版
-
-3. 运行 酷Q，启用 CQHTTP插件，修改CQHTTP插件的配置文件，下面的配置可供参考：
-
-    ```json
-    {
-        "use_http": false,
-        "use_ws": false,
-        "use_ws_reverse": true,
-        "ws_reverse_use_universal_client": true,
-        "ws_reverse_url": "ws://127.0.0.1:8080/ws/",
-        "serve_data_files": false
-    }
-    ```
-
-    关于CQHTTP插件的配置说明，详见 [CQHTTP 文档 -> 配置](https://cqhttp.cc/docs/#/Configuration)
-
-4. 打开一个合适的文件夹，点击资源管理器左上角的 `文件 -> 打开Windows Powershell`
-
-5. 输入以下命令克隆本仓库并安装依赖
-
-    ```powershell
-    git clone https://github.com/Ice-Cirno/HoshinoBot.git
-    cd HoshinoBot
-    py -3.8 -m pip install -r requirements.txt
-    ```
-    >若此处有报错信息，请务必解决，将错误信息复制到百度搜索一般即可找到解决办法。  
-    >
-    >若安装python依赖库时下载速度缓慢，可以尝试使用`py -3.8 -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt`
-
-6. 回到资源管理器，进入`hoshino`文件夹，将`config_example`文件夹重命名为`config`，然后右键使用Notepad++打开其中的`__bot__.py`，按照其中的注释说明进行编辑。
-
-    > 如果您不清楚某项设置的作用，请保持默认
-    
-7. 回到powershell，启动 Hoshino
-
-    ```powershell
-    py -3.8 run.py
-    ```
-
-    私聊机器人发送`在？`，若机器人有回复，恭喜您！您已经成功搭建起HoshinoBot了。之后您可以尝试在群内发送`!帮助`以查看会战管理的相关说明，发送`help`查看其他一般功能的相关说明，发送`pcr速查`查看常用网址等。
-
-    注意，此时您的机器人功能还不完全，部分功能可能无法正常工作。若希望您的机器人可以发送图片，或使用其他进阶功能，请参考本章**更进一步**的对应小节。
-
-
-
-
-
-#### Linux 部署
-
-由于 酷Q 仅支持 Windows 环境，我们需要使用 docker 镜像来部署 酷Q 及 CQHTTP 插件。但别担心，相信我，这比 Windows 下部署更简单！您可以在[这个文档](https://cqhttp.cc/docs/)找到详细的说明。下面将带领您进行部署：
-
-1. 安装 docker：参考https://docs.docker.com/engine/install/debian/
-
-2. 部署 docker：下面一条命令仅供参考，请根据实际情况修改参数；详细说明可见 [CQHTTP 文档 -> Docker](https://cqhttp.cc/docs/#/Docker)
-
-    ```bash
-    sudo docker run -d --name=hoshino \
-    -v $(pwd)/coolq:/home/user/coolq \
-    -p 9000:9000 \
-    -e VNC_PASSWD=MAXchar8 \
-    -e COOLQ_ACCOUNT=10000 \
-    -e COOLQ_URL=https://dlsec.cqp.me/cqp-full \
-    -e CQHTTP_SERVE_DATA_FILES=no \
-    -e CQHTTP_USE_HTTP=no \
-    -e CQHTTP_USE_WS_REVERSE=yes \
-    -e CQHTTP_WS_REVERSE_URL=ws://172.17.0.1:8080/ws/ \
-    -e CQHTTP_WS_REVERSE_USE_UNIVERSAL_CLIENT=yes \
-    richardchien/cqhttp:latest
-    ```
-
-    > 使用这行命令`ip addr show docker0 | grep -Po 'inet \K[\d.]+'`查看你的docker桥ip，替换`CQHTTP_WS_REVERSE_URL`中的链接
-    >
-    > 然后访问 `http://<你的IP>:9000/` 进入 noVNC（默认密码 `MAXchar8`），登录 酷Q
-    > 
-    > 注：如果你希望先使用酷Q Air进行尝试，请将COOLQ_URL设置为`https://dlsec.cqp.me/cqa-xiaoi`；之后可以用CQP.exe替换CQA.exe以升级，或删除容器重新创建。
-
-3. 回到我们熟悉的命令行，安装 Python 3.8
-
-    ```bash
-    # Ubuntu or Debian
-    sudo apt install python3.8
-    ```
-    > 若您的包管理工具（如`yum`）尚不支持`python3.8`，你可以尝试从源码安装。  
-    >
-    > Google will help you greatly : )
-
-4. 克隆本仓库并安装依赖包
-    ```bash
-    git clone https://github.com/Ice-Cirno/HoshinoBot.git
-    cd HoshinoBot
-    python3.8 -m pip install -r requirements.txt
-    ```
-
-5. 编辑配置文件
-    ```bash
-    mv hoshino/config_example hoshino/config
-    nano hoshino/config/__bot__.py
-    ```
-    > 配置文件内有相应注释，请根据您的实际配置填写，HoshinoBot仅支持反向ws通信
-    >
-    > 您也可以使用`vim`编辑器，若您从未使用过，我推荐您使用 `nano` : )
-6. 运行bot
-    ```bash
-    python3.8 run.py
-    ```
-    
-    私聊机器人发送`在？`，若机器人有回复，恭喜您！您已经成功搭建起HoshinoBot了。之后您可以尝试在群内发送`!帮助`以查看会战管理的相关说明，发送`help`查看其他一般功能的相关说明，发送`pcr速查`查看常用网址等。
-    
-    注意，此时您的机器人功能还不完全，部分功能可能无法正常工作。若希望您的机器人可以发送图片，或使用其他进阶功能，请参考本章**更进一步**的对应小节。
-
-
-</details>
+> 若缺失，请在容器内手动补装，或改用 `install_deps.py` 的逻辑修正 `Dockerfile`。裸机部署请始终使用 `python3 install_deps.py`。
 
 ### 更进一步
 
@@ -332,7 +227,7 @@ docker run -d --name hoshino \
 > 发送图片的条件：  
 > 1. 静态图片资源
 
-您可能希望看到更为精致的图片版结果，若希望机器人能够发送图片，首先需要您购买酷Q Pro版，其次需要准备静态图片资源，其中包括：
+您可能希望看到更为精致的图片版结果，若希望机器人能够发送图片，需要准备静态图片资源，其中包括：
 
 - 公主连接角色头像（来自 [干炸里脊资源站](https://redive.estertion.win/) 的拆包）
 - 公主连接官方四格漫画
