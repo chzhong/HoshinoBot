@@ -74,7 +74,7 @@ async def get_uploader_url(bot, ev):
     cfg = config.__bot__
     await bot.send(ev,f'http://{public_address}:{cfg.PORT}/xcwmain')
 
-@sv.on_fullmatch("#帮助",only_to_me=False)
+@sv.on_fullmatch("网页帮助",only_to_me=False)
 async def get_uploader_url(bot, ev):
     cfg = config.__bot__
     await bot.send(ev,f'http://{public_address}:{cfg.PORT}/xcwhelp')

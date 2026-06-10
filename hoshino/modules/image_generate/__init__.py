@@ -71,5 +71,7 @@ gvc
 猫
 ksm
 栞栞
+mika
+小雪
 '''
     await bot.send(ev, msg, at_sender=True)

@@ -74,11 +74,11 @@ async def ddhaole(bot, ev):
         await util.silence(ev, 30)
 
 
-@sv.on_fullmatch('我好了')
-async def nihaole(bot, ev):
-    await bot.send(ev, '不许好，憋回去！')
-    if not priv.check_priv(ev, priv.ADMIN):
-        await util.silence(ev, 30)
+# @sv.on_fullmatch('我好了')
+# async def nihaole(bot, ev):
+#     await bot.send(ev, '不许好，憋回去！')
+#     if not priv.check_priv(ev, priv.ADMIN):
+#         await util.silence(ev, 30)
 
 # ============================================ #
 
@@ -102,5 +102,5 @@ nyb_player = f'''{R.img('newyearburst.gif').cqcode}
 
 @sv.on_keyword(('春黑', '新黑'))
 async def new_year_burst(bot, ev):
-    if random.random() < 0.02:
+    if random.random() < 0.01:
         await bot.send(ev, nyb_player)

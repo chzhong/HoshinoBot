@@ -43,7 +43,7 @@ async def lssv(session:CommandSession):
                 "content": msg
             }
             }
-    await bot.send_group_forward_msg(group_id=session.ctx.get('group_id'), messages=data)
+    await session.send(msg)
 
 
 @on_command('enable', aliases=('启用', '开启', '打开'), permission=perm.GROUP, only_to_me=False)
