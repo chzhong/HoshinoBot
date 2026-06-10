@@ -120,7 +120,11 @@ env.bak/
 venv.bak/
 .idea/
 *.iml
+.envrc
 
+# AI
+CHAT.txt
+CLAUDE.md
 
 # Spyder project settings
 .spyderproject
@@ -131,9 +135,8 @@ venv.bak/
 
 # mkdocs documentation
 /site
+log/
+fonts/
 
 # mypy
 .mypy_cache/
-
-.DS_Store
-.venv/
