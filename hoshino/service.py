@@ -210,9 +210,15 @@ class Service:
         def deco(func) -> Callable:
             @wraps(func)
             async def wrapper(bot: HoshinoBot, event: CQEvent):
-                if len(event.message) != 1 or event.message[0].data.get('text'):
-                    self.logger.info(f'Message {event.message_id} is ignored by fullmatch condition.')
-                    return
+                #txt = event.message[0].data.get('text')
+                #if len(event.message) != 1 or txt:
+                for msg in event.message:
+                    txt = msg.data.get('text')
+                    if not txt:
+                        continue
+                    if txt.strip():
+                        self.logger.info(f'Message {event.message_id} is ignored by fullmatch condition:.')
+                        return
                 return await func(bot, event)
             sf = ServiceFunc(self, wrapper, only_to_me)
             for w in word:

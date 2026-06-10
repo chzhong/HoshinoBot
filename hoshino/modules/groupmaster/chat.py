@@ -74,11 +74,11 @@ async def ddhaole(bot, ev):
         await util.silence(ev, 30)
 
 
-@sv.on_fullmatch('我好了')
-async def nihaole(bot, ev):
-    await bot.send(ev, '不许好，憋回去！')
-    if not priv.check_priv(ev, priv.ADMIN):
-        await util.silence(ev, 30)
+# @sv.on_fullmatch('我好了')
+# async def nihaole(bot, ev):
+#     await bot.send(ev, '不许好，憋回去！')
+#     if not priv.check_priv(ev, priv.ADMIN):
+#         await util.silence(ev, 30)
 
 # ============================================ #
 
