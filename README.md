@@ -152,22 +152,34 @@ QQ 客户端的安装与对接不在本仓库维护范围内，请自行查阅�
 
 ### Docker 镜像
 
-`Dockerfile` 基于 `python:3.11-slim-trixie`，监听 **8080**。构建前确保本地存在 `fonts/` 目录（已在 `.gitignore` 中，需自行准备）。
+`Dockerfile` 基于 `python:3.11-slim-trixie`，以专用用户 **`pcrbot`** 在虚拟环境 **`/home/pcrbot/.venv`** 中运行，监听 **8080**。构建前确保本地存在 `fonts/` 目录（已在 `.gitignore` 中，需自行准备）。
+
+**依赖分层**：
+
+| 层级 | 内容 | 时机 |
+|------|------|------|
+| 系统 `-dev` 包 | `build-essential`、`zlib1g-dev` 等常见编译库 | 镜像构建 |
+| 框架 Python 包 | 根目录 `requirements.txt` | 镜像构建，装入 `.venv` |
+| 插件 Python 包 | `hoshino/modules/*/requirements.txt` | **首次容器启动**自动扫描安装 |
+
+仅挂载代码目录 `/HoshinoBot`；**勿**挂载 `/home/pcrbot`（`.venv` 随镜像，升级 OS/Python 时随新容器重建）。
 
 #### 本机构建
-
-在已安装 Docker 的机器上，于项目根目录执行：
 
 ```bash
 cd /path/to/HoshinoBot
 DOCKER_BUILDKIT=1 docker build -t pcrbot/hoshinobot:pcrjjc2 .
 ```
 
-构建机与运行机架构相同时（例如均为 amd64 Linux），可直接 `docker run`，无需指定 `--platform`。
+挂载目录属主与容器用户不一致时，可指定 UID/GID（默认 1000）：
+
+```bash
+DOCKER_BUILDKIT=1 docker build \
+  --build-arg PUID=1000 --build-arg PGID=1000 \
+  -t pcrbot/hoshinobot:pcrjjc2 .
+```
 
 #### 交叉编译（MBP Apple Silicon → Ubuntu / NAS）
-
-MacBook Pro（Apple Silicon，`linux/arm64`）上构建、在常见 x86_64 服务器或 NAS（`linux/amd64`）上运行时，需指定目标平台：
 
 ```bash
 cd /path/to/HoshinoBot
@@ -177,7 +189,7 @@ DOCKER_BUILDKIT=1 docker build \
   .
 ```
 
-构建完成后在本机验证架构：
+验证架构：
 
 ```bash
 docker inspect pcrbot/hoshinobot:pcrjjc2 --format '{{.Architecture}}'
@@ -186,14 +198,12 @@ docker inspect pcrbot/hoshinobot:pcrjjc2 --format '{{.Architecture}}'
 
 #### 离线传输与运行
 
-远端无法 `docker pull` 时，可打包离线传输（含全部 layer，无需预装基础镜像）：
-
 ```bash
 docker save pcrbot/hoshinobot:pcrjjc2 | gzip > hoshinobot-pcrjjc2.tar.gz
 # 远端：gunzip -c hoshinobot-pcrjjc2.tar.gz | docker load
 ```
 
-镜像内仅预装 Python 依赖，业务代码与配置需挂载：
+业务代码与配置需挂载；首次启动会自动安装各插件 `requirements.txt`：
 
 ```bash
 docker run -d --name hoshino \
@@ -202,17 +212,74 @@ docker run -d --name hoshino \
   pcrbot/hoshinobot:pcrjjc2
 ```
 
-> **⚠️ Docker 镜像：插件依赖安装可能不完整**
->
-> `Dockerfile` 通过 `find . -path "*/modules/*" -name requirements.txt` 安装各插件依赖，部分构建环境下该步骤可能**未能正确执行**（例如缺少 `pycryptodome`，报 `ModuleNotFoundError: No module named 'Crypto'`）。
->
-> 构建后建议检查：
->
-> ```bash
-> docker run --rm pcrbot/hoshinobot:pcrjjc2 pip show pycryptodome redis msgpack
-> ```
->
-> 若缺失，请在容器内手动补装，或改用 `install_deps.py` 的逻辑修正 `Dockerfile`。裸机部署请始终使用 `python3 install_deps.py`。
+插件依赖较大、希望先快速启动 bot 时，可跳过启动期自动安装：
+
+```bash
+docker run -d --name hoshino -e SKIP_MODULE_DEPS=1 \
+  -p 8080:8080 \
+  -v /path/to/HoshinoBot:/HoshinoBot \
+  pcrbot/hoshinobot:pcrjjc2
+# 之后：docker exec -u pcrbot hoshino /HoshinoBot/docker/reinstall-module-deps.sh
+```
+
+#### 镜像升级（换 Python / Debian 版本）
+
+```bash
+docker build -t pcrbot/hoshinobot:pcrjjc2 .
+docker rm -f hoshino
+docker run -d --name hoshino -p 8080:8080 \
+  -v /path/to/HoshinoBot:/HoshinoBot \
+  pcrbot/hoshinobot:pcrjjc2
+```
+
+新容器自带与新 OS/Python 匹配的 `.venv`（框架依赖），并会在首次启动时重新安装插件依赖。
+
+#### 容器内排错
+
+日常以 **`pcrbot`** 进入容器即可；`bash` 会自动激活 `/home/pcrbot/.venv`，并打印与下文一致的常用命令提示。
+
+**pcrbot 用户（Python 依赖、调试）**
+
+```bash
+# 交互式 shell（自动进入 venv）
+docker exec -u pcrbot -it hoshino bash
+
+# 重装全部插件依赖（git pull / git clone 新插件后）
+docker exec -u pcrbot hoshino /HoshinoBot/docker/reinstall-module-deps.sh
+
+# 单独安装 Python 包（容器内已激活 venv 时可直接 pip）
+docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install <package>
+docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install \
+  -r hoshino/modules/<plugin>/requirements.txt
+```
+
+**root 用户（系统依赖、复杂运维）**
+
+`pcrbot` 无 `sudo`，安装系统包或需要 root 权限的操作须从宿主机以 root 进入容器：
+
+```bash
+# 以 root 进入交互式 shell（apt、改系统配置等）
+docker exec -u root -it hoshino bash
+
+# 仅安装系统包（无需进入 shell）
+docker exec -u root hoshino /HoshinoBot/docker/apt-install.sh <package>
+# 示例
+docker exec -u root hoshino /HoshinoBot/docker/apt-install.sh libssl-dev
+```
+
+系统包装好后，回到 `pcrbot` 重试 pip（必要时 `--force-reinstall`）：
+
+```bash
+docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install --force-reinstall <package>
+```
+
+验证框架依赖（镜像内已装）：
+
+```bash
+docker exec -u pcrbot hoshino pip show nonebot
+```
+
+裸机部署请使用 `python3 install_deps.py` 安装全部依赖。
 
 ### 更进一步
 
