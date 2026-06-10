@@ -118,6 +118,91 @@ QQ群[![试用/赞助群](https://img.shields.io/badge/试用/赞助-Hoshinoの�
 - 《[Windows 给新人的简易部署指南](https://github.com/Soung2279/Mirai-Bot-Setup)》作者：[SYoung](https://github.com/Soung2279)
 - 《[使用 Docker 部署 HoshinoBot 与 yobot](https://cn.pcrbot.com/depoly-with-docker/)》作者：[yuudi](https://github.com/yuudi)
 
+### Docker 镜像（HoshinoBot 本体）
+
+`Dockerfile` 基于 `python:3.11-slim-trixie`，以专用用户 **`pcrbot`** 在虚拟环境 **`/home/pcrbot/.venv`** 中运行，监听 **8080**。构建前确保本地存在 `fonts/` 目录（已在 `.gitignore` 中，需自行准备）。
+
+**依赖分层**：
+
+| 层级 | 内容 | 时机 |
+|------|------|------|
+| 系统包 | `build-essential`、`libssl-dev`、中文字体等 | 镜像构建 |
+| 框架 Python 包 | 根目录 `requirements.txt` | 镜像构建，装入 `.venv` |
+| 插件 Python 包 | `hoshino/modules/*/requirements.txt` | **首次容器启动**自动扫描安装 |
+
+仅挂载代码目录 `/HoshinoBot`；**勿**挂载 `/home/pcrbot`（`.venv` 随镜像，升级 OS/Python 时随新容器重建）。
+
+#### 构建与运行
+
+```bash
+cd /path/to/HoshinoBot
+DOCKER_BUILDKIT=1 docker build -t pcrbot/hoshinobot:clan .
+
+docker run -d --name hoshino \
+  -p 8080:8080 \
+  -v /path/to/HoshinoBot:/HoshinoBot \
+  pcrbot/hoshinobot:clan
+```
+
+挂载目录属主与容器用户不一致时，构建时指定 UID/GID（默认 1000）：
+
+```bash
+DOCKER_BUILDKIT=1 docker build \
+  --build-arg PUID=1000 --build-arg PGID=1000 \
+  -t pcrbot/hoshinobot:clan .
+```
+
+插件依赖较大、希望先快速启动 bot 时，可跳过启动期自动安装：
+
+```bash
+docker run -d --name hoshino -e SKIP_MODULE_DEPS=1 \
+  -p 8080:8080 \
+  -v /path/to/HoshinoBot:/HoshinoBot \
+  pcrbot/hoshinobot:clan
+# 之后：docker exec -u pcrbot hoshino /HoshinoBot/docker/reinstall-module-deps.sh
+```
+
+#### 镜像升级（换 Python / Debian 版本）
+
+```bash
+docker build -t pcrbot/hoshinobot:clan .
+docker rm -f hoshino
+docker run -d --name hoshino -p 8080:8080 \
+  -v /path/to/HoshinoBot:/HoshinoBot \
+  pcrbot/hoshinobot:clan
+```
+
+#### 容器内排错
+
+日常以 **`pcrbot`** 进入容器即可；`bash` 会自动激活 `/home/pcrbot/.venv`，并打印常用命令提示。
+
+**pcrbot 用户（Python 依赖、调试）**
+
+```bash
+docker exec -u pcrbot -it hoshino bash
+docker exec -u pcrbot hoshino /HoshinoBot/docker/reinstall-module-deps.sh
+docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install <package>
+docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install \
+  -r hoshino/modules/<plugin>/requirements.txt
+```
+
+**root 用户（系统依赖、复杂运维）**
+
+`pcrbot` 无 `sudo`，安装系统包或需要 root 权限的操作须从宿主机以 root 进入容器：
+
+```bash
+docker exec -u root -it hoshino bash
+docker exec -u root hoshino /HoshinoBot/docker/apt-install.sh <package>
+```
+
+系统包装好后，回到 `pcrbot` 重试 pip（必要时 `--force-reinstall`）：
+
+```bash
+docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install --force-reinstall <package>
+```
+
+裸机部署可使用 `python3 install_deps.py` 安装全部依赖。
+
 <details>
   <summary>（点击查看旧文档）</summary>
 

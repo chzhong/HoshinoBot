@@ -1,0 +1,7 @@
+# 按需通过 apt-install.sh 安装的系统包（非镜像默认预装）
+# libssl-dev      — cryptography / ssl 相关 Python 包编译
+# libffi-dev      — cffi 编译
+# libjpeg-dev     — Pillow JPEG 支持
+# zlib1g-dev      — 部分压缩库编译（镜像已预装）
+# libxml2-dev     — lxml 等（镜像已预装）
+# libxslt-dev     — lxml 等（镜像已预装）

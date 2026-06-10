@@ -1,0 +1,24 @@
+# HoshinoBot container — pcrbot interactive shell
+
+if [ -z "${VIRTUAL_ENV:-}" ] && [ -f "${HOME}/.venv/bin/activate" ]; then
+    # shellcheck source=/dev/null
+    . "${HOME}/.venv/bin/activate"
+    echo "已进入虚拟环境：${VIRTUAL_ENV}"
+fi
+
+_hoshino_docker_hint() {
+    echo "----------------------------------------"
+    echo "安装/重装插件 Python 依赖："
+    echo "  /HoshinoBot/docker/reinstall-module-deps.sh"
+    echo "或者单独安装："
+    echo "  pip install <package>"
+    echo "  pip install -r hoshino/<modules>/<plugin>/requirements.txt"
+    echo ""
+    echo "若需要安装系统依赖或执行复杂运维任务，需要 root 身份安装或进入容器："
+    echo "  docker exec -u root <container> /HoshinoBot/docker/apt-install.sh <package>"
+    echo "  docker exec -u root -it <container> bash"
+    echo "HoshinoBot 运行在 Python 虚拟环境中，请不要以 root 身份安装 Python 包"    
+    echo "----------------------------------------"
+    echo ""
+}
+_hoshino_docker_hint

@@ -15,10 +15,17 @@ imgs/
 image/
 images/
 
-# 非公开的组件
-hoshino/modules/pcrclanbattle/clanbattlev3
-hoshino/modules/pcrclanbattle/clanbattlev4
-hoshino/modules/umamusume
+# 其他分支
+hoshino/modules/pcrdata/
+hoshino/modules/pcrjjc2/
+# Git 管理的组件
+hoshino/modules/auto_strategy/
+hoshino/modules/autopcr/
+hoshino/modules/convert2img/
+hoshino/modules/huannai_report/
+hoshino/modules/kanna_connection_redive/
+hoshino/modules/multicq_send/
+hoshino/modules/pcr_calculator_plus/
 
 # 暂时删除的代码
 TRASH/
