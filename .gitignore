@@ -23,6 +23,8 @@ hoshino/modules/umamusume
 # 暂时删除的代码
 TRASH/
 kokkoro-OLD/
+*.bak
+*.*_*
 
 # VSCode Folder
 .vscode/

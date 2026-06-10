@@ -18,6 +18,7 @@ room_states = {}
 all_user_name = {}
 isOnChecking = False
 bilibiliCookie = ''
+userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.0.0 Safari/537.36'
 
 sv = Service('bili-dynamic', help_='''
 B站动态推送插件
@@ -68,7 +69,7 @@ async def loadConfig():
     push_times = {}
     room_states = {}
     config_path = path.join(path.dirname(__file__), 'config.json')
-    with open(config_path, 'r', encoding='utf8')as fp:
+    with open(config_path, 'r', encoding='utf8') as fp:
         conf = json.load(fp)
         messageLengthLimit = conf['message_length_limit']
         keys = conf['uid_bind'].keys()
@@ -90,7 +91,7 @@ async def loadConfig():
 
 def saveConfig():
     config_path = path.join(path.dirname(__file__), 'config.json')
-    with open(config_path, 'r+', encoding='utf8')as fp:
+    with open(config_path, 'r+', encoding='utf8') as fp:
         conf = json.load(fp)
         keys = push_uids.keys()
         conf['uid_bind'].clear()
@@ -104,7 +105,8 @@ def saveConfig():
 
 async def check_uid_exsist(uid):
     header = {
-        'Referer': 'https://space.bilibili.com/{user_uid}/'.format(user_uid=uid)
+        'Referer': 'https://space.bilibili.com/{user_uid}/'.format(user_uid=uid),
+        'User-Agent': userAgent
     }
     try:
         resp = await aiorequests.get('http://api.bilibili.com/x/space/acc/info?mid={user_uid}'.format(user_uid=uid), headers=header, timeout=20)
@@ -119,7 +121,8 @@ async def check_uid_exsist(uid):
 
 async def get_user_name(uid):
     header = {
-        'Referer': 'https://space.bilibili.com/{user_uid}/'.format(user_uid=uid)
+        'Referer': 'https://space.bilibili.com/{user_uid}/'.format(user_uid=uid),
+        'User-Agent': userAgent
     }
     try:
         resp = await aiorequests.get('http://api.bilibili.com/x/space/acc/info?mid={user_uid}'.format(user_uid=uid), headers=header, timeout=20)
@@ -259,7 +262,8 @@ async def check_bili_dynamic():
         # if uid != "171818544":
         #    continue
         header = {
-            'Referer': 'https://space.bilibili.com/{user_uid}/'.format(user_uid=uid)
+            'Referer': 'https://space.bilibili.com/{user_uid}/'.format(user_uid=uid),
+            'User-Agent': userAgent
         }
         try:
             resp = await aiorequests.get('https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/space_history?host_uid={user_uid}'.format(user_uid=uid), headers=header,
@@ -450,32 +454,31 @@ async def check_bili_dynamic():
         try:
             header = {
                 'Referer': 'https://space.bilibili.com/{user_uid}/'.format(user_uid=uid),
-                'Cookie': bilibiliCookie
+                'Cookie': bilibiliCookie,
+                'User-Agent': userAgent
             }
-            resp = await aiorequests.get('https://api.live.bilibili.com/room/v1/Room/getRoomInfoOld?mid={user_id}'.format(user_id=uid), headers=header, timeout=20)
+            resp = await aiorequests.get('https://api.bilibili.com/x/space/acc/info?mid={user_id}'.format(user_id=uid), headers=header, timeout=20)
             res = await resp.json()
-            if res['data']['liveStatus'] == 1 and not room_states[uid]:
+            if res['data']['live_room']['liveStatus'] == 1 and not room_states[uid]:
                 room_states[uid] = True
                 sendCQCode = []
                 userName = all_user_name[uid]
                 sendCQCode.append(userName)
                 sendCQCode.append('开播了：\n')
-                sendCQCode.append(res['data']['title'])
+                sendCQCode.append(res['data']['live_room']['title'])
                 sendCQCode.append('\n')
-                sendCQCode.append(getImageCqCode(res['data']['cover']))
+                sendCQCode.append(getImageCqCode(res['data']['live_room']['cover']))
                 sendCQCode.append('\n')
-                sendCQCode.append(res['data']['url'])
+                sendCQCode.append(res['data']['live_room']['url'])
                 msg = ''.join(sendCQCode)
                 if push_uids[uid][0] == 'all':
                     await broadcast(msg, sv_name='bili-dynamic')
                 else:
                     await broadcast(msg, push_uids[uid])
-            elif room_states[uid] and res['data']['liveStatus'] == 0:
+            elif room_states[uid] and res['data']['live_room']['liveStatus'] == 0:
                 room_states[uid] = False
                 sendCQCode = []
-                userResp = await aiorequests.get('https://api.bilibili.com/x/space/acc/info?mid={user_id}'.format(user_id=uid), timeout=20)
-                userRes = await userResp.json()
-                userName = userRes['data']['name']
+                userName = res['data']['name']
                 sendCQCode.append(userName)
                 sendCQCode.append('下播了')
                 msg = ''.join(sendCQCode)

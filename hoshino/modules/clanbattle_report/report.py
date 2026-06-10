@@ -25,9 +25,11 @@ cycle_data = {
         'cycle_mode': 'days',
         'cycle_days': 28,
         'base_date': datetime.date(2020, 7, 28),  #从巨蟹座开始计算
-        'base_month': 5,
-        'battle_days': 6,
-        'reserve_days': 0
+        'end_date': datetime.date(2021, 10, 31),
+        'start_month': 5,
+        'base_month': 0,
+        'battle_days': 5,
+        'reserve_days': 1
     },
     'jp': {
         'cycle_mode': 'nature',
@@ -129,14 +131,14 @@ def str_len(name):
 
 #获取工会战开始天数 第一天=0
 #日服台服开始前返回值为负 国服为正(大于工会战持续天数)
-def get_days_from_battle_start(server='cn'):
+def get_days_from_battle_start(server='cn', today=None):
     if not server in cycle_data.keys():
         return -1
     cdata = cycle_data[server]
-    today = datetime.date.today()
+    today = today if today is not None else datetime.date.today()
     #today = datetime.date(2020, 8, 31)
     month_days = calendar.monthrange(today.year,today.month)[1]
-    if cdata['cycle_mode'] == 'nature': #自然月 日台服
+    if cdata['cycle_mode'] == 'nature' or today > cdata['end_date']: #自然月 日台服
         return today.day - (month_days - cdata['battle_days'] - cdata['reserve_days'] + 1)
     else:
         return (today - cdata['base_date']).days % cdata['cycle_days']
@@ -148,15 +150,15 @@ def get_battle_days(server='cn'):
     return cycle_data[server]['battle_days']
 
 #获取工会战实际月份
-def get_clanbattle_month(server='cn'):
+def get_clanbattle_month(server='cn', today=None):
     if not server in cycle_data.keys():
         return 0
     cdata = cycle_data[server]
-    today = datetime.date.today()
+    today = today if today is not None else datetime.date.today()
     year = today.year
     month = 0
-    if cdata['cycle_mode'] == 'nature': #自然月 日台服
-        if get_days_from_battle_start(server) < 0: #本月还没有开始 使用上个月
+    if cdata['cycle_mode'] == 'nature' or today > cdata['end_date']: #自然月 日台服
+        if get_days_from_battle_start(server, today) < 0: #本月还没有开始 使用上个月
             month = today.month - 1
         else: #本月工会战已开始
             month = today.month
@@ -170,14 +172,14 @@ def get_clanbattle_month(server='cn'):
         return (start_date.year, start_date.month)
 
 #获取工会战星座月份
-def get_constellation(server='cn'):
+def get_constellation(server='cn', today=None):
     if not server in cycle_data.keys():
         return constellation_name[0]    #返回？？？
     cdata = cycle_data[server]
-    today = datetime.date.today()
+    today = today if today is not None else datetime.date.today()
     month = 0
-    if cdata['cycle_mode'] == 'nature': #自然月 日台服
-        if get_days_from_battle_start(server) < 0: #本月还没有开始 使用上个月
+    if cdata['cycle_mode'] == 'nature' or today > cdata['end_date']: #自然月 日台服
+        if get_days_from_battle_start(server, today) < 0: #本月还没有开始 使用上个月
             month = today.month - 1
         else: #本月工会战已开始
             month = today.month
@@ -188,7 +190,7 @@ def get_constellation(server='cn'):
           month -= 12
     else:   #天数周期循环 国服
         during_month = (today - cdata['base_date']).days // cdata['cycle_days']
-        month = during_month + cdata['base_month']
+        month = during_month + cdata['start_month']
         month = month % 12 + 1
     return constellation_name[month]
 
@@ -445,6 +447,38 @@ async def send_report(bot, event, background):
     base64_str = f'base64://{base64.b64encode(buf.getvalue()).decode()}'
     await bot.send(event, f'[CQ:image,file={base64_str}]', at_sender=True)
     plt.close('all')
+
+def prepend_years(now: datetime.datetime, parsed: datetime.datetime) -> datetime.date:
+    return now.date().replace(month=parsed.month, day=parsed.day)
+
+DATE_PATTERNS = [
+    ('%m/%d', prepend_years), ('%m-%d', prepend_years),
+    ('%y/%m%/%d', lambda n, p: p.date()), ('%y-%m-%d', lambda n, p: p.date()),
+    ('%Y/%m%/%d', lambda n, p: p.date()), ('%Y-%m-%d', lambda n, p: p.date())
+]
+
+
+def parse_date(s: str, now: datetime.datetime = None) -> datetime.date:
+    now = now if now else datetime.datetime.now()
+    for pattern, converter in DATE_PATTERNS:
+        try:
+            parsed = datetime.datetime.strptime(s, pattern)
+            return converter(now, parsed)
+        except ValueError:
+            continue
+    raise ValueError('不支持的日期格式：' + s)
+
+
+@sv.on_prefix('会战星座')
+async def ask_constellation(bot, ev: CQEvent):
+    text = str(ev.message).strip()
+    if not text:
+        await bot.send(ev, "会战星座 (年/)月/日", at_sender=True)
+        return
+    target_date = parse_date(text)
+    constellation = get_constellation('cn', target_date)
+    await bot.send(ev, "%s使用%s座公会战的报告" % (target_date.strftime('%Y-%m-%d'), constellation))
+
 
 @sv.on_prefix('生成离职报告')
 async def create_resign_report(bot, event: CQEvent):

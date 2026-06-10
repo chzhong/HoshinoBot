@@ -102,5 +102,5 @@ nyb_player = f'''{R.img('newyearburst.gif').cqcode}
 
 @sv.on_keyword(('春黑', '新黑'))
 async def new_year_burst(bot, ev):
-    if random.random() < 0.02:
+    if random.random() < 0.01:
         await bot.send(ev, nyb_player)
