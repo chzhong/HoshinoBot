@@ -26,6 +26,9 @@ from .service_help import sv_help
 random.seed()
 
 sv = SafeService("竞技场推送", help_=sv_help, bundle="pcr查询")
+# Quart/ASGI 会给 root logger 挂 `INFO in %(module)s` 格式 handler；
+# Service logger 默认 propagate=True，monitor 日志会重复输出。
+sv.logger.propagate = False
 
 cache_db = jjcdata()
 
