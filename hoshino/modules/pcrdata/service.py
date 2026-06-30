@@ -19,16 +19,16 @@ sv = SafeService("PCR数据", help_="PCR角色数据自动更新", bundle="pcr")
 
 @sv.scheduled_job("cron", hour=16, minute=5, jitter=60)
 async def scheduled_update():
-    sv.logger.info("[PCR数据] 定时检查数据库更新...")
-    updated = await check_and_update()
+    sv.logger.info("定时检查数据库更新...")
+    updated = await check_and_update(logger=sv.logger)
     if updated:
-        sv.logger.info(f"[PCR数据] 数据库已更新至 ver={db.ver}")
+        sv.logger.info(f"数据库已更新至 ver={db.ver}")
 
 
 async def _startup_check():
     await asyncio.sleep(10)
-    sv.logger.info("[PCR数据] 启动时检查数据库更新...")
-    await check_and_update()
+    sv.logger.info("启动时检查数据库更新...")
+    await check_and_update(logger=sv.logger)
 
 
 # ── 指令 ──────────────────────────────────────────────────────────────────────
@@ -70,7 +70,7 @@ async def cmd_check_status(bot, ev):
 @sv.on_prefix(("更新数据", "强制更新数据"))
 async def cmd_force_update(bot, ev):
     await bot.send(ev, "开始强制更新数据库，请稍候...")
-    updated = await check_and_update(force=True)
+    updated = await check_and_update(force=True, logger=sv.logger)
     if updated:
         await bot.send(
             ev,
@@ -109,4 +109,4 @@ async def cmd_query_id(bot, ev):
 try:
     asyncio.get_event_loop().create_task(_startup_check())
 except Exception as e:
-    sv.logger.warning(f"[PCR数据] startup check task create failed: {e}")
+    sv.logger.warning(f"startup check task create failed: {e}")

@@ -9,11 +9,14 @@ import asyncio
 import logging
 import os
 import sys
+from typing import Optional
 
 from .constants import save_app_version, save_manifest_version
 from .pcrclient import pcrclient
 
-logger = logging.getLogger(__name__)
+
+def _get_logger(logger: Optional[logging.Logger] = None) -> logging.Logger:
+    return logger or logging.getLogger(__name__)
 
 
 _pcrclient = pcrclient()
@@ -61,34 +64,40 @@ async def fetch_manifest_ver() -> str:
     raise ValueError(f"manifest_ver not found in response: {manifest}")
 
 
-async def check_and_update(force: bool = False) -> bool:
+async def check_and_update(
+    force: bool = False,
+    logger: Optional[logging.Logger] = None,
+) -> bool:
     """
     检查并更新数据库。
     force=True 时跳过版本比较，强制重新下载。
+    logger 未指定时使用本模块 logger（CLI 等独立运行场景）。
     返回是否执行了更新。
     """
     from .assetmgr import assetmgr
     from .dbmgr import instance as db
 
+    log = _get_logger(logger)
+
     try:
         ver = await fetch_manifest_ver()
     except Exception as e:
-        logger.error(f"[pcrdata] fetch_manifest_ver failed: {e}")
+        log.error(f"fetch_manifest_ver failed: {e}")
         return False
 
     if not force and db.ver == ver:
-        logger.info(f"[pcrdata] db is up-to-date (ver={ver})")
+        log.info(f"db is up-to-date (ver={ver})")
         return False
 
-    logger.info(f"[pcrdata] updating db: {db.ver} -> {ver}")
+    log.info(f"updating db: {db.ver} -> {ver}")
     try:
         mgr = assetmgr()
         await mgr.init(ver)
         await db.update_db(mgr)
-        logger.info(f"[pcrdata] db updated to ver={ver}, size={db.db_size}")
+        log.info(f"db updated to ver={ver}, size={db.db_size}")
         return True
     except Exception as e:
-        logger.error(f"[pcrdata] db update failed: {e}")
+        log.error(f"db update failed: {e}")
         return False
 
 
