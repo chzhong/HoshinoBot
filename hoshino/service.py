@@ -123,6 +123,7 @@ class Service:
         self.disable_group = set(config.get('disable_group', []))
 
         self.logger = log.new_logger(name, hoshino.config.DEBUG)
+        self.logger.propagate = False
 
         assert self.name not in _loaded_services, f'Service name "{self.name}" already exist!'
         _loaded_services[self.name] = self
