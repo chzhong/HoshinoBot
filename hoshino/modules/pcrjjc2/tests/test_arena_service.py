@@ -1182,6 +1182,52 @@ class TestCheckWanted(unittest.TestCase):
         # 应该只调用一次 get_profile
         self.assertEqual(call_count, 1, "同一 uid 应该只查询一次 API")
 
+    def test_multi_group_wanted_rise_counted_once(self):
+        """同一 uid 被多个群通缉时，排名上升只递增一次攻击计数。"""
+        uid = "1012345678901"
+        wanted_mgr = make_wanted_mgr(
+            ("group", "10001", uid),
+            ("group", "10002", uid),
+        )
+        ranks = {uid: (100, 50)}
+        user_infos = {
+            uid: {
+                "user_name": "テスト",
+                "user_dname": "テスト",
+                "last_login_time": 0,
+            }
+        }
+        cache = make_cache(ranks=ranks, user_infos=user_infos)
+        profiles = {
+            uid: make_profile(
+                uid, name="テスト", arena_rank=80, grand_arena_rank=50
+            )
+        }
+
+        mock_bot = MagicMock()
+        mock_bot.send_group_msg = AsyncMock()
+        mock_logger = MagicMock()
+
+        with patch(
+            "hoshino.modules.pcrjjc2.rank_monitor.get_profile",
+            side_effect=lambda u: profiles[u],
+        ):
+            svc = make_svc(wanted_mgr=wanted_mgr, cache=cache, bot=mock_bot, logger=mock_logger)
+            from .. import rank_monitor
+
+            ctx = rank_monitor.CheckContext(
+                bot=mock_bot,
+                logger=mock_logger,
+                cache=cache,
+                config=svc._config,
+                now=mkt(10, 0),
+            )
+            run(svc.check_wanted(ctx, delay=0))
+
+        cache.cache_user_jjc_challenge.assert_called_once_with(uid)
+        cache.cache_user_pjjc_challenge.assert_not_called()
+        self.assertEqual(mock_bot.send_group_msg.call_count, 2)
+
 
 class TestCheckContextShouldCheck(unittest.TestCase):
     """CheckContext.should_check_subscription 各时段逻辑。

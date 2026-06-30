@@ -4,7 +4,7 @@ rank_monitor.py - 排名监控核心逻辑
 职责：
   - fetch_and_update()：查询单个 uid 的最新排名，对比 Redis 基准，返回 RankDiff
   - build_subscription_lines()：将 RankDiff 转换为订阅通知行（供 arena_service 聚合）
-  - build_wanted_message()：将 RankDiff 转换为通缉通报消息（含上线/改名/攻击计数）
+  - build_wanted_message()：将 RankDiff 转换为通缉通报消息（含上线/改名/排名变动）
 
 此模块不持有任何状态，所有方法为纯函数或接受注入的依赖。
 """
@@ -213,6 +213,9 @@ class CheckContext:
         self._wanted_check_config = wanted_check_config
         self._round_cache: RoundCache = RoundCache()
 
+    def new_query_stats(self) -> "QueryStats":
+        return QueryStats()
+
     @property
     def bot(self):
         return self._bot
@@ -308,9 +311,16 @@ class CheckContext:
             return None
 
 
+@dataclass
+class QueryStats:
+    api_queries: int = 0
+    cache_hits: int = 0
+
+
 async def fetch_and_update(
     ctx: CheckContext,
     uid: str,
+    stats: Optional[QueryStats] = None,
 ) -> Optional[RankDiff]:
     """
     查询 uid 的最新排名，对比 Redis 基准，更新 Redis，并填入 round_cache。
@@ -325,13 +335,17 @@ async def fetch_and_update(
     logger = ctx.logger
     async with entry:
         if entry:
-            logger.info(f"[monitor] use cached result for uid={uid}")
+            if stats is not None:
+                stats.cache_hits += 1
+            logger.debug(f"[monitor] use cached result for uid={uid}")
             return entry.value
         else:
             cache = ctx.cache
 
             try:
-                logger.info(f"[monitor] querying uid={uid}")
+                if stats is not None:
+                    stats.api_queries += 1
+                logger.debug(f"[monitor] querying uid={uid}")
                 res = await get_profile(uid)
             except ApiException as e:
                 logger.info(
@@ -417,10 +431,26 @@ def _check_key(d1: dict, d2: dict, key: str) -> bool:
     return key in d1 and key in d2
 
 
+def record_challenge_counts(
+    detail: WantedDetail,
+    diff: RankDiff,
+    cache: jjcdata,
+    hour: int,
+) -> None:
+    """对每个 uid 至多递增一次上升次数（Redis 按 uid 全局计数）。"""
+    watch_jjc = any(w.should_notice_arena(hour) for w in detail.watchers)
+    watch_pjjc = any(w.should_notice_grand_arena(hour) for w in detail.watchers)
+    last_jjc, last_pjjc = diff.last_ranks
+    new_jjc, new_pjjc = diff.new_ranks
+    if watch_jjc and new_jjc < last_jjc:
+        cache.cache_user_jjc_challenge(diff.uid)
+    if watch_pjjc and new_pjjc < last_pjjc:
+        cache.cache_user_pjjc_challenge(diff.uid)
+
+
 def build_wanted_message(
     item: NoticeItem,
     diff: RankDiff,
-    cache: jjcdata,
 ) -> Optional[str]:
     """
     根据 RankDiff 和通缉条目的开关，生成通缉通报消息字符串。
@@ -429,9 +459,8 @@ def build_wanted_message(
     通缉逻辑：
       - 上线检测：last_login_time 距上次 > 3分钟 → 显示上线时间
       - 改名检测：user_name 变化 → 显示新名
-      - jjc 排名上升（数字减小）→ 攻击计数 +1，只要 item.arena_on 且 watch_at 含 jjc
-      - pjjc 排名上升 → 同理
-      - 排名下降（数字增大）→ 也通报（被打了），不计攻击
+      - jjc/pjjc 排名上升（数字减小）→ 通报上升名次
+      - 排名下降（数字增大）→ 也通报（被打了）
     """
     last = diff.last_info
     new = diff.new_info
@@ -467,8 +496,6 @@ def build_wanted_message(
     if watch_jjc and new_jjc != last_jjc:
         diff_n = new_jjc - last_jjc
         direction = "下降" if diff_n > 0 else "上升"
-        if diff_n < 0:
-            cache.cache_user_jjc_challenge(diff.uid)
         jjc_notice = f"\njjc：{last_jjc}->{new_jjc} {direction}{abs(diff_n)}名"
 
     # pjjc 排名变动
@@ -476,8 +503,6 @@ def build_wanted_message(
     if watch_pjjc and new_pjjc != last_pjjc:
         diff_n = new_pjjc - last_pjjc
         direction = "下降" if diff_n > 0 else "上升"
-        if diff_n < 0:
-            cache.cache_user_pjjc_challenge(diff.uid)
         pjjc_notice = f"\npjjc：{last_pjjc}->{new_pjjc} {direction}{abs(diff_n)}名"
 
     has_change = login_notice or change_name_notice or jjc_notice or pjjc_notice
@@ -528,7 +553,16 @@ async def check_subscriptions(
         logger.info("[monitor] skipped subscription check")
         return
 
-    logger.info("[monitor] checking ranks for subscribers...")
+    uid_count = len(
+        {
+            item.id
+            for qq, item in subscription_manager.get_all_items()
+            if qq != "0"
+        }
+    )
+    logger.info(f"[monitor] checking ranks for subscribers... ({uid_count} uids)")
+    t0 = time.monotonic()
+    stats = ctx.new_query_stats()
 
     # 按 qq 分组：qq -> {gid -> [SubscriptionItem]}
     by_user: Dict[str, Dict[str, List[SubscriptionItem]]] = defaultdict(
@@ -542,9 +576,14 @@ async def check_subscriptions(
 
     for qq, groups in by_user.items():
         for gid, items in groups.items():
-            await _check_user_subscriptions_in_group(ctx, qq, gid, items)
+            await _check_user_subscriptions_in_group(ctx, qq, gid, items, stats)
 
-    logger.info("[monitor] done checking ranks for subscribers.")
+    elapsed = time.monotonic() - t0
+    logger.info(
+        f"[monitor] done checking ranks for subscribers. "
+        f"({uid_count} uids, {stats.api_queries} queried, "
+        f"{stats.cache_hits} cached, {elapsed:.1f}s)"
+    )
 
 
 async def _check_user_subscriptions_in_group(
@@ -552,6 +591,7 @@ async def _check_user_subscriptions_in_group(
     qq: str,
     gid: str,
     items: List[SubscriptionItem],
+    stats: QueryStats,
 ) -> None:
     """
     处理单个用户在单个群的订阅列表。
@@ -565,7 +605,7 @@ async def _check_user_subscriptions_in_group(
         uid = sub.id
 
         # 命中本轮缓存：直接取出 diff，跳过 API 和 Redis 读写
-        diff = await fetch_and_update(ctx, uid)
+        diff = await fetch_and_update(ctx, uid, stats)
         if diff is None:
             continue  # 首次记录或查询失败
 
@@ -603,19 +643,31 @@ async def check_wanted(
         logger.info("[monitor] skipped wanted check")
         return
 
-    logger.info("[monitor] checking wanted ranks...")
+    uid_count = len(wanted_items_to_check)
+    logger.info(f"[monitor] checking wanted ranks... ({uid_count} uids)")
+    t0 = time.monotonic()
+    stats = ctx.new_query_stats()
     # 第一步：检测所有 uid 的变更状态
     # uid -> (WantedDetail, RankDiff)
     uid_diffs: Dict[str, Tuple[WantedDetail, RankDiff]] = {}
     for wanted_detail in wanted_items_to_check:
-        diff = await fetch_and_update(ctx, wanted_detail.uid)
+        diff = await fetch_and_update(ctx, wanted_detail.uid, stats)
         if diff is not None:
             uid_diffs[wanted_detail.uid] = (wanted_detail, diff)
 
-    logger.info("[monitor] done checking wanted ranks.")
+    elapsed = time.monotonic() - t0
+    logger.info(
+        f"[monitor] done checking wanted ranks. "
+        f"({uid_count} uids, {stats.api_queries} queried, "
+        f"{stats.cache_hits} cached, {len(uid_diffs)} changed, {elapsed:.1f}s)"
+    )
 
     if not uid_diffs:
         return  # 没有任何变更
+
+    hour = ctx.now.hour
+    for wanted_detail, diff in uid_diffs.values():
+        record_challenge_counts(wanted_detail, diff, ctx.cache, hour)
 
     # 第二步：按群分组，计算通知信息
     # gid -> {
@@ -670,7 +722,7 @@ async def check_wanted(
                 arena_on=arena_on,
                 grand_arena_on=grand_arena_on,
             )
-            msg = build_wanted_message(temp_item, diff, ctx.cache)
+            msg = build_wanted_message(temp_item, diff)
             if msg is None:
                 continue  # 无需通报
 
