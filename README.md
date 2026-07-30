@@ -1,6 +1,6 @@
 # HoshinoBot
 [![License](https://img.shields.io/github/license/Ice-Cirno/HoshinoBot)](LICENSE)
-![Python Version](https://img.shields.io/badge/python-3.8+-blue)
+![Python Version](https://img.shields.io/badge/python-3.10+-blue)
 ![Nonebot Version](https://img.shields.io/badge/nonebot-1.6.0%2B%2C%202.0.0---blue)
 [![试用/赞助群](https://img.shields.io/badge/试用/赞助-Hoshinoのお茶会-brightgreen)](https://jq.qq.com/?_wv=1027&k=eYGgrL4A)
 [![开发交流群](https://img.shields.io/badge/开发交流-Hoshinoの后花园-brightgreen)](https://jq.qq.com/?_wv=1027&k=wgirhYYQ)
@@ -122,6 +122,8 @@ QQ群[![试用/赞助群](https://img.shields.io/badge/试用/赞助-Hoshinoの�
 
 `Dockerfile` 基于 `python:3.11-slim-trixie`，以专用用户 **`pcrbot`** 在虚拟环境 **`/home/pcrbot/.venv`** 中运行，监听 **8080**。构建前确保本地存在 `fonts/` 目录（已在 `.gitignore` 中，需自行准备）。
 
+项目的本地开发与最低兼容版本为 **Python 3.10**；当前 Docker 运行环境为 **Python 3.11**。插件可能有更严格的 Python 版本约束，安装或升级插件前请先检查其 `pyproject.toml` 或 README。
+
 **依赖分层**：
 
 | 层级 | 内容 | 时机 |
@@ -213,7 +215,7 @@ docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install --force-
 #### Windows 部署
 
 1. 安装下面的软件/工具
-    - Python 3.8：https://www.python.org/downloads/windows/
+    - Python 3.10：https://www.python.org/downloads/windows/
     - Git：https://git-scm.com/download/win
     - Notepad++：https://notepad-plus-plus.org/downloads/
 
@@ -246,11 +248,11 @@ docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install --force-
     ```powershell
     git clone https://github.com/Ice-Cirno/HoshinoBot.git
     cd HoshinoBot
-    py -3.8 -m pip install -r requirements.txt
+    py -3.10 -m pip install -r requirements.txt
     ```
     >若此处有报错信息，请务必解决，将错误信息复制到百度搜索一般即可找到解决办法。  
     >
-    >若安装python依赖库时下载速度缓慢，可以尝试使用`py -3.8 -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt`
+    >若安装python依赖库时下载速度缓慢，可以尝试使用`py -3.10 -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt`
 
 6. 回到资源管理器，进入`hoshino`文件夹，将`config_example`文件夹重命名为`config`，然后右键使用Notepad++打开其中的`__bot__.py`，按照其中的注释说明进行编辑。
 
@@ -259,7 +261,7 @@ docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install --force-
 7. 回到powershell，启动 Hoshino
 
     ```powershell
-    py -3.8 run.py
+    py -3.10 run.py
     ```
 
     私聊机器人发送`在？`，若机器人有回复，恭喜您！您已经成功搭建起HoshinoBot了。之后您可以尝试在群内发送`!帮助`以查看会战管理的相关说明，发送`help`查看其他一般功能的相关说明，发送`pcr速查`查看常用网址等。
@@ -299,13 +301,13 @@ docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install --force-
     > 
     > 注：如果你希望先使用酷Q Air进行尝试，请将COOLQ_URL设置为`https://dlsec.cqp.me/cqa-xiaoi`；之后可以用CQP.exe替换CQA.exe以升级，或删除容器重新创建。
 
-3. 回到我们熟悉的命令行，安装 Python 3.8
+3. 回到我们熟悉的命令行，安装 Python 3.10
 
     ```bash
     # Ubuntu or Debian
-    sudo apt install python3.8
+    sudo apt install python3.10 python3.10-venv
     ```
-    > 若您的包管理工具（如`yum`）尚不支持`python3.8`，你可以尝试从源码安装。  
+    > 若您的包管理工具尚不提供 `python3.10`，请使用 pyenv 或 Python 官方安装方式。  
     >
     > Google will help you greatly : )
 
@@ -313,7 +315,7 @@ docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install --force-
     ```bash
     git clone https://github.com/Ice-Cirno/HoshinoBot.git
     cd HoshinoBot
-    python3.8 -m pip install -r requirements.txt
+    python3.10 -m pip install -r requirements.txt
     ```
 
 5. 编辑配置文件
@@ -326,7 +328,7 @@ docker exec -u pcrbot hoshino /HoshinoBot/docker/pip-install.sh install --force-
     > 您也可以使用`vim`编辑器，若您从未使用过，我推荐您使用 `nano` : )
 6. 运行bot
     ```bash
-    python3.8 run.py
+    python3.10 run.py
     ```
     
     私聊机器人发送`在？`，若机器人有回复，恭喜您！您已经成功搭建起HoshinoBot了。之后您可以尝试在群内发送`!帮助`以查看会战管理的相关说明，发送`help`查看其他一般功能的相关说明，发送`pcr速查`查看常用网址等。
@@ -440,4 +442,3 @@ access_token_secret = "your_access_token_secret"
 **公主连结Re: Dive Fan Club - 硬核的竞技场数据分析站**: https://pcrdfans.com/
 
 **yobot**: https://yobot.win/
-

@@ -12,5 +12,6 @@ beautifulsoup4>=4.9.0
 pygtrie>=2.0
 tinydb>=4.0
 aiohttp>=3.6
+tomli>=1.1.0; python_version < "3.11"
 loguru # used by kanna_connection_redive
 opencv-python-headless # used by autopcr
