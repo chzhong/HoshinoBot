@@ -189,9 +189,21 @@ class IconsTest(unittest.IsolatedAsyncioTestCase):
 
 
 class RuntimeTest(unittest.IsolatedAsyncioTestCase):
+    @unittest.skipUnless(importlib.util.find_spec("nonebot"), "NoneBot 1.x required for plugin discovery")
+    def test_nonebot_discovers_plugin_entry(self):
+        from nonebot.plugin import load_plugins
+
+        module = "hoshino.modules.pcr_roster.entry"
+        discovered = object()
+        with patch("nonebot.plugin.load_plugin", return_value=discovered) as load:
+            self.assertEqual(load_plugins(str(PLUGIN), "hoshino.modules.pcr_roster"), {discovered})
+            load.assert_called_once_with(module)
+
     async def test_runtime_refresh_and_superuser_commands(self):
-        name = "_roster_entrypoint_test"
-        spec = importlib.util.spec_from_file_location(name, PLUGIN / "__init__.py")
+        package = ModuleType("_roster_entrypoint_test")
+        package.__path__ = [str(PLUGIN)]
+        name = f"{package.__name__}.entry"
+        spec = importlib.util.spec_from_file_location(name, PLUGIN / "entry.py")
         plugin = importlib.util.module_from_spec(spec)
         chara = ModuleType("hoshino.modules.priconne.chara")
         chara.Chara = type("Chara", (), {})
@@ -225,7 +237,7 @@ class RuntimeTest(unittest.IsolatedAsyncioTestCase):
              dict(wraps=wraps, hoshino=hoshino, nonebot=nonebot, CommandSession=object, Callable=object,
                   _PauseException=RuntimeError, _FinishException=RuntimeError, SwitchException=RuntimeError,
                   sulogger=Mock()), service.__dict__)
-        with patch.dict(sys.modules, {name: plugin, "hoshino": hoshino, "nonebot": nonebot,
+        with patch.dict(sys.modules, {name: plugin, package.__name__: package, "hoshino": hoshino, "nonebot": nonebot,
                                       chara.__name__: chara, data.__name__: data, service.__name__: service}):
             spec.loader.exec_module(plugin)
             plugin.refresh_runtime(SimpleNamespace(names={1002: ["NEW"]}, profiles={1002: {"名字": "NEW"}}))

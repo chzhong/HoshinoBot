@@ -6,7 +6,7 @@ HoshinoBot `clan` 分支的独立插件。无需启用 `priconne` 或 `priconne.
 
 1. 保留并备份现有的 `hoshino/modules/priconne/CHARA_NAME.json`、`CHARA_PROFILE.json`。机器人用户需要能写入这两个文件所在的目录，以及 `RES_DIR/img/priconne/unit/`、`~/.hoshino/pcr_roster/`。`CHARA_PROFILE.json` 在 `clan` 分支是 Git 跟踪文件，不要把部署环境生成的改动混进代码提交。
 2. 用 Hoshino 实际运行的 Python 安装本目录 `requirements.txt`。它只加 `UnityPy`，不要求升级 Pydantic；PNG 处理使用 Hoshino 已有的 Pillow。
-3. 在 `MODULES_ON` 中加入 `pcr_roster`，放在两版报刀插件之前。重启后先发 `花名册状态`；需要立即更新时发 `同步花名册`。兼容方法在插件加载时安装，日常同步不需要重启。
+3. 在 `MODULES_ON` 中加入 `pcr_roster`，放在两版报刀插件之前。重启后确认日志出现 `Succeeded to import "hoshino.modules.pcr_roster.entry"`，再发 `花名册状态`；需要立即更新时发 `同步花名册`。兼容方法在插件加载时安装，日常同步不需要重启。
 
 如果是全新部署、缺少 `CHARA_NAME.json`，先让该插件同步生成花名册，再重启一次，确保依赖原有花名册文件的报刀插件可以顺利加载。
 

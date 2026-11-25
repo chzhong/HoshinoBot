@@ -1,3 +1,5 @@
+"""NoneBot 1.x discovers this module inside the pcr_roster directory."""
+
 import asyncio
 import importlib
 import json
