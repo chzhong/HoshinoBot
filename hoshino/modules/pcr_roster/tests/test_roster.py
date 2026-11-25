@@ -1,3 +1,4 @@
+import ast
 import importlib.util
 import json
 import os
@@ -6,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
@@ -187,7 +189,7 @@ class IconsTest(unittest.IsolatedAsyncioTestCase):
 
 
 class RuntimeTest(unittest.IsolatedAsyncioTestCase):
-    async def test_runtime_refresh_preserves_direct_imports_and_permissions(self):
+    async def test_runtime_refresh_and_superuser_commands(self):
         name = "_roster_entrypoint_test"
         spec = importlib.util.spec_from_file_location(name, PLUGIN / "__init__.py")
         plugin = importlib.util.module_from_spec(spec)
@@ -198,23 +200,68 @@ class RuntimeTest(unittest.IsolatedAsyncioTestCase):
         names = data.CHARA_NAME = {1001: ["旧角色"]}
         profiles = data.CHARA_PROFILE = {}
         decorator = lambda *args, **kw: (lambda f: f)
+        commands = {}
+
+        def on_command(name, **options):
+            def register(handler):
+                commands[name] = handler, options
+                return handler
+            return register
+
         hoshino = ModuleType("hoshino")
-        hoshino.Service = lambda *args, **kw: SimpleNamespace(logger=Mock(), on_fullmatch=decorator,
-                                                              scheduled_job=decorator)
+        hoshino.Service = lambda *args, **kw: SimpleNamespace(logger=Mock(), scheduled_job=decorator)
         hoshino.R = SimpleNamespace()
         hoshino.util = SimpleNamespace(normalize_str=str.lower)
-        hoshino.priv = SimpleNamespace(SUPERUSER=999, check_priv=lambda ev, _: ev.allowed)
+        hoshino.priv = SimpleNamespace(SUPERUSER=999)
+        hoshino.config = SimpleNamespace(SUPERUSERS={1})
         nonebot = ModuleType("nonebot")
         nonebot.on_startup = lambda f: f
+        nonebot.on_command = on_command
+        service = ModuleType("hoshino.service")
+        source = PLUGIN.parents[1] / "service.py"
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        sucmd = next(node for node in tree.body if getattr(node, "name", None) == "sucmd")
+        exec(compile(ast.Module(body=[sucmd], type_ignores=[]), str(source), "exec"),
+             dict(wraps=wraps, hoshino=hoshino, nonebot=nonebot, CommandSession=object, Callable=object,
+                  _PauseException=RuntimeError, _FinishException=RuntimeError, SwitchException=RuntimeError,
+                  sulogger=Mock()), service.__dict__)
         with patch.dict(sys.modules, {name: plugin, "hoshino": hoshino, "nonebot": nonebot,
-                                      chara.__name__: chara, data.__name__: data}):
+                                      chara.__name__: chara, data.__name__: data, service.__name__: service}):
             spec.loader.exec_module(plugin)
             plugin.refresh_runtime(SimpleNamespace(names={1002: ["NEW"]}, profiles={1002: {"名字": "NEW"}}))
             self.assertIs(names, data.CHARA_NAME)
             self.assertIs(profiles, data.CHARA_PROFILE)
             self.assertEqual(chara.roster._roster["new"], 1002)
             self.assertEqual(names, {1002: ["NEW"]})
-            bot = SimpleNamespace(send=AsyncMock())
-            await plugin.sync_command(bot, SimpleNamespace(allowed=False))
-            await plugin.icon_command(bot, SimpleNamespace(allowed=False))
-            bot.send.assert_not_awaited()
+            self.assertEqual({key: options["aliases"] for key, (_, options) in commands.items()}, {
+                "pcr-roster-status": ("花名册状态",), "pcr-roster-sync": ("同步花名册",),
+                "pcr-roster-download-icons": ("下载所有角色头像",),
+            })
+            event = SimpleNamespace(user_id=2, detail_type="private", message_id=42)
+            session = SimpleNamespace(bot=object(), send=AsyncMock(), event=event, current_arg="")
+            plugin.sync_once = AsyncMock(return_value="同步成功")
+            plugin.download_job = AsyncMock()
+            plugin.read_status = Mock(return_value={})
+            for handler, options in commands.values():
+                self.assertTrue(options["privileged"])
+                self.assertFalse(options["only_to_me"])
+                await handler(session)
+            session.send.assert_not_awaited()
+            plugin.sync_once.assert_not_awaited()
+            plugin.download_job.assert_not_awaited()
+
+            event.user_id = 1
+            await commands["pcr-roster-status"][0](session)
+            session.send.assert_awaited_once_with("花名册：暂无成功同步记录。")
+            event.detail_type = "group"
+            await commands["pcr-roster-sync"][0](session)
+            session.send.assert_awaited_with("同步成功")
+
+            session.current_arg = "额外参数"
+            await commands["pcr-roster-download-icons"][0](session)
+            plugin.download_job.assert_not_awaited()
+            session.current_arg = ""
+            event.detail_type = "private"
+            await commands["pcr-roster-download-icons"][0](session)
+            await plugin.icon_job
+            plugin.download_job.assert_awaited_once_with(session.bot, session.event)

@@ -7,6 +7,7 @@ from pathlib import Path
 import nonebot
 
 from hoshino import R, Service, priv, util
+from hoshino.service import sucmd
 
 from .core.catalog import json_bytes, load_files, write_bytes
 from .core.icons import IconDownloader, UNKNOWN, icon_name, install_icon_compat
@@ -110,23 +111,30 @@ async def scheduled_sync():
     await sync_once()
 
 
-@sv.on_fullmatch("花名册状态")
-async def status_command(bot, ev):
-    if not priv.check_priv(ev, priv.SUPERUSER):
+async def reject_arguments(session):
+    if (session.current_arg or "").strip():
+        await session.send("这条命令不需要参数，请只发送命令名。")
+        return True
+    return False
+
+
+@sucmd("pcr-roster-status", force_private=False, aliases=("花名册状态",))
+async def status_command(session):
+    if await reject_arguments(session):
         return
     status = await asyncio.to_thread(read_status)
     extra = f"\n{last_issue}" if last_issue else ""
-    await bot.send(ev, describe(status) + extra)
+    await session.send(describe(status) + extra)
 
 
-@sv.on_fullmatch("同步花名册")
-async def sync_command(bot, ev):
-    if not priv.check_priv(ev, priv.SUPERUSER):
+@sucmd("pcr-roster-sync", force_private=False, aliases=("同步花名册",))
+async def sync_command(session):
+    if await reject_arguments(session):
         return
     if lock.locked() or (icon_job and not icon_job.done()):
-        await bot.send(ev, "已有花名册或头像任务在运行。")
+        await session.send("已有花名册或头像任务在运行。")
         return
-    await bot.send(ev, await sync_once())
+    await session.send(await sync_once())
 
 
 async def download_job(bot, ev):
@@ -161,16 +169,16 @@ async def download_job(bot, ev):
         sv.logger.warning("无法发送头像任务结果：%s", message)
 
 
-@sv.on_fullmatch("下载所有角色头像")
-async def icon_command(bot, ev):
+@sucmd("pcr-roster-download-icons", force_private=False, aliases=("下载所有角色头像",))
+async def icon_command(session):
     global icon_job
-    if not priv.check_priv(ev, priv.SUPERUSER):
+    if await reject_arguments(session):
         return
     if lock.locked() or (icon_job and not icon_job.done()):
-        await bot.send(ev, "已有花名册或头像任务在运行。")
+        await session.send("已有花名册或头像任务在运行。")
         return
-    icon_job = asyncio.create_task(download_job(bot, ev))
-    await bot.send(ev, "已开始补齐角色头像，完成后会发送统计。")
+    icon_job = asyncio.create_task(download_job(session.bot, session.event))
+    await session.send("已开始补齐角色头像，完成后会发送统计。")
 
 
 # Must be available before Kanna's first Web request; no networking at import.
